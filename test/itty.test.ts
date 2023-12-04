@@ -121,6 +121,27 @@ test("object pick", () => {
   });
 });
 
+test("object omit", () => {
+  const User = i.object({
+    username: i.string(),
+    age: i.number(),
+  });
+
+  const Person = User.omit("age");
+
+  type Person = valueOf<typeof Person>;
+
+  expect(i.isObject(Person)).toBe(true);
+
+  const person = Person.parse({
+    username: "person",
+  });
+
+  expect(person).toEqual({
+    username: "person",
+  });
+});
+
 test("class", () => {
   class User extends i.class({
     username: i.string(),
@@ -204,6 +225,56 @@ test("class extends", () => {
       age: "42",
     })
   ).toThrow();
+});
+
+test("class pick", () => {
+  class User extends i.class({
+    username: i.string(),
+    self: i.this().optional(),
+  }) {}
+
+  class Person extends User.pick("username") {
+    getPerson() {
+      return this.username;
+    }
+  }
+
+  expect(i.isClass(Person)).toBe(true);
+
+  const person = Person.parse({
+    username: "person",
+  });
+
+  expect(person).toEqual(
+    new Person({
+      username: "person",
+    })
+  );
+});
+
+test("class omit", () => {
+  class User extends i.class({
+    username: i.string(),
+    age: i.number(),
+  }) {}
+
+  class Person extends User.omit("age") {
+    getPerson() {
+      return this.username;
+    }
+  }
+
+  expect(i.isClass(Person)).toBe(true);
+
+  const person = Person.parse({
+    username: "person",
+  });
+
+  expect(person).toEqual(
+    new Person({
+      username: "person",
+    })
+  );
 });
 
 test("enum", () => {

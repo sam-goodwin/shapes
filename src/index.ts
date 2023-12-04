@@ -126,6 +126,25 @@ export interface iClass<S extends Shape = Shape, Super = {}>
     this: Self,
     shape: Other
   ): iClass<Simplify<Other & Omit<Self["shape"], keyof Other>>>;
+
+  pick<Self extends iClass<S>, K extends keyof S>(
+    ...keys: K[]
+  ): iClass<Simplify<Pick<S, K>>>;
+  pick<
+    Mask extends {
+      [k in keyof S]?: true | never;
+    }
+  >(
+    mask: Mask
+  ): iClass<Pick<S, Extract<keyof Mask, keyof S>>>;
+  omit<K extends keyof S>(...keys: K[]): iClass<Omit<S, K>>;
+  omit<
+    Mask extends {
+      [k in keyof S]?: true | never;
+    }
+  >(
+    mask: Mask
+  ): iClass<Omit<S, keyof Mask>>;
 }
 export type iUnion<T extends iType = iType> = ISchema<"union"> & {
   options: T[];
