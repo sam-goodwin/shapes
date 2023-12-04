@@ -14,7 +14,12 @@ function run {
 }
 
 for file in src/*.ts; do 
-  run $(basename "$file" .ts)
+  name=$(basename "$file" .ts)
+  # if name is speed.ts
+  if [[ $name == "speed" ]]; then
+    continue
+  fi
+  run $name
 done
 
 wait

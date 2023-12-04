@@ -3,7 +3,9 @@
   "name": "benchmark",
   "private": true,
   "scripts": {
-    "build": "./run.sh"
+    "build": "pnpm run benchmark:speed & pnpm run benchmark:bundle",
+    "benchmark:speed": "bun ./src/speed.ts",
+    "benchmark:bundle": "./run.sh"
   },
   "dependencies": {
     "itty-schema": "file:../",

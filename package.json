@@ -17,7 +17,9 @@
     "build": "tsc -b",
     "watch": "tsc -b -w",
     "test": "bun test",
-    "benchmark": "cd ./benchmark && pnpm build"
+    "benchmark": "cd ./benchmark && pnpm build",
+    "benchmark:speed": "cd ./benchmark && pnpm benchmark:speed",
+    "benchmark:bundle": "cd ./benchmark && pnpm benchmark:bundle"
   },
   "keywords": [],
   "author": "",
