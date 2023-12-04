@@ -44,10 +44,10 @@ type Simplify<T> = { [KeyType in keyof T]: T[KeyType] } & {};
 
 interface iSchema<K extends iKind = iKind> {
   [Itty]: K;
-  [Symbol.hasInstance]<Self extends iType>(
-    this: Self,
-    val: unknown
-  ): val is valueOf<Self, Self>;
+  // [Symbol.hasInstance]<Self extends iType>(
+  //   this: Self,
+  //   val: unknown
+  // ): val is valueOf<Self, Self>;
   describe(text: string): this;
   parse<Self extends new (input: any) => any>(
     this: Self,
@@ -147,7 +147,7 @@ function createItty<Props extends Record<string, any>>(props: Props): Itty {
         if (typeof type === "string" && type.startsWith("is")) {
           return (value: any) =>
             value &&
-            typeof value === "object" &&
+            (typeof value === "object" || typeof value === "function") &&
             value[Itty] === (type.slice(2).toLowerCase() as iKind);
         } else if (type === "describe") {
           return (description: string) =>
@@ -160,42 +160,61 @@ function createItty<Props extends Record<string, any>>(props: Props): Itty {
               [Itty]: type,
               ...props,
               ...shape,
-              parse(value: any) {
-                if (type === "literal") {
-                  if (!shape.literal.includes(value)) {
-                    // TODO: support objects and array primitive values
-                    throw new Error("Expected a literal");
-                  }
-                  return value;
-                } else if (type === "object") {
-                  if (typeof value !== "object" || value === null) {
-                    throw new Error("Expected an object");
-                  }
-                  const result: any = {};
-                  for (const key in shape) {
-                    result[key] = shape[key].parse(value[key]);
-                  }
-                  return result;
-                } else if (type === "array") {
-                  if (!Array.isArray(value)) {
-                    throw new Error("Expected an array");
-                  }
-                  return value.map(shape.parse);
-                } else if (typeof value === type) {
-                  return value;
-                }
-              },
             };
+
             if (type === "class") {
               class Schema {
+                static parse(value: any) {
+                  return new this(value);
+                }
                 constructor(value: any) {
-                  Object.assign(this, schema.parse(value));
+                  Object.assign(
+                    this,
+                    parse.call(this.constructor as any, value)
+                  );
                 }
               }
               Object.assign(Schema, schema);
               return Schema;
             } else {
-              return schema;
+              return {
+                ...schema,
+                parse,
+              };
+            }
+
+            function parse(this: iSchema | undefined, value: any) {
+              if (type === "literal") {
+                if (!shape.literal.includes(value)) {
+                  // TODO: support objects and array primitive values
+                  throw new Error("Expected a literal");
+                }
+                return value;
+              } else if (type === "object" || type === "class") {
+                if (typeof value !== "object" || value === null) {
+                  throw new Error("Expected an object");
+                }
+                const result: any = {};
+                for (const key in shape) {
+                  result[key] = shape[key].parse.call(this, value[key]);
+                }
+                return result;
+              } else if (type === "this") {
+                if (this === undefined) {
+                  throw new Error(`this is undefined`);
+                }
+                // @ts-ignore
+                return this.parse.call(this, value);
+              } else if (type === "array") {
+                if (!Array.isArray(value)) {
+                  throw new Error("Expected an array");
+                }
+                return value.map(shape.parse.bind(this));
+              } else if (typeof value === type) {
+                return value;
+              } else {
+                throw new Error(`Unsupported type ${type.toString()}`);
+              }
             }
           };
         }

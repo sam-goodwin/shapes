@@ -14,7 +14,12 @@ test("object", () => {
 
   const user = User.parse({
     username: "john",
-    self: [],
+    self: [
+      {
+        username: "foo",
+        self: [],
+      },
+    ],
   });
 
   expect(user).toEqual({
@@ -38,28 +43,30 @@ test("class", () => {
     }
   }
 
-  const user2 = new User({
-    username: "john",
-    self: [
-      new User({
-        username: "",
-        self: [],
-      }),
-    ],
-  });
   expect(i.isClass(User)).toBe(true);
 
   const user = User.parse({
     username: "john",
-    self: [],
+    self: [
+      {
+        username: "sam",
+        self: [],
+      },
+    ],
   });
   expect(user).toBeInstanceOf(User);
   expect(user.getUsername()).toBe("john");
+  expect(user.self[0].getUsername()).toBe("sam");
 
   expect(user).toEqual(
     new User({
       username: "john",
-      self: [],
+      self: [
+        new User({
+          username: "sam",
+          self: [],
+        }),
+      ],
     })
   );
 });
