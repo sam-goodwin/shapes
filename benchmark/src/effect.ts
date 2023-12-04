@@ -1,32 +1,14 @@
-import * as S from "@effect/schema/Schema";
-import * as Either from "effect/Either";
+import { struct, string, number, parse } from "@effect/schema/Schema";
 
-const Person = S.struct({
-  name: S.string,
-  age: S.number,
+const Person = struct({
+  name: string,
+  age: number,
 });
 
-const parsePerson = S.parseEither(Person);
+const parsePerson = parse(Person);
 
 const input: unknown = { name: "Alice", age: 30 };
 
 const result1 = parsePerson(input);
-if (Either.isRight(result1)) {
-  console.log(result1.right);
-  /*
-  Output:
-  { name: "Alice", age: 30 }
-  */
-}
 
-const result2 = parsePerson(null);
-if (Either.isLeft(result2)) {
-  console.log(result2.left);
-  /*
-  Output:
-  {
-    _id: 'ParseError',
-    message: 'error(s) found\n└─ Expected <anonymous type literal schema>, actual null'
-  }
-  */
-}
+console.log(result1);

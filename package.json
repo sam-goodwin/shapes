@@ -17,7 +17,7 @@
     "build": "tsc -b",
     "watch": "tsc -b -w",
     "test": "bun test",
-    "benchmark": "./benchmark/run.sh"
+    "benchmark": "cd ./benchmark && pnpm build"
   },
   "keywords": [],
   "author": "",

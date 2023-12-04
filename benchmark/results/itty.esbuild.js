@@ -1,1 +1,234 @@
-var p=class{props;constructor(e){typeof e=="string"?this.props={kind:e}:this.props=e,Object.assign(this,e)}clone(e){return new this.constructor({...this,...e})}describe(e){return this.clone({description:e})}optional(){return n.union(this,n.undefined())}nullable(){return n.union(this,n.null())}nullish(){return n.union(this,n.null(),n.undefined())}extend(e){return this.kind==="class"?n.class({...this.shape,...e},this):n.object({...this.shape,...e})}merge(e){return this.extend(e.shape)}pick(e,...r){return this.pickOrOmit(typeof e=="string"?[e,...r]:e,!0)}omit(e,...r){return this.pickOrOmit(typeof e=="string"?[e,...r]:e,!1)}pickOrOmit(e,r){let t=new Set(Array.isArray(e)?e:Object.keys(e)),s=Object.fromEntries(Object.entries(this.shape).filter(([i])=>r?t.has(i):!t.has(i)));return this.kind==="class"?n.class(s):n.object(s)}partial(){let e={};for(let[r,t]of Object.entries(this.shape))e[r]=n.union(t,n.undefined());return this.kind==="class"?n.class(e):n.object(e)}deepPartial(){let e=this;if(this.kind==="class"||this.kind==="object"){let r={};for(let[t,s]of Object.entries(e.shape))r[t]=n.union(s,n.undefined());return this.kind==="class"?n.class(r):n.object(r)}else return this.kind==="array"?n.array(e.item.deepPartial()):n.union(e,n.undefined())}keyof(){if(this.kind==="class"||this.kind==="object")return n.enum(...Object.keys(this.shape))}parse(e,r){let t=this.kind;if(t==="object"||t==="class"){let s=this;if(typeof e!="object"||e===null)throw new Error("Expected an object");let i={};for(let[o,c]of Object.entries(s.shape))if(o in e)i[o]=c.parse(e[o],this);else if(!n.isUndefined(c)){if(n.isUnion(c)&&c.options.some(n.isUndefined))continue;throw new Error(`Expected ${o} in object`)}return t==="class"?new this(i):i}else{if(typeof e===t)return e;if(t==="any"||t==="unknown")return e;if(t==="never")throw new Error("Received never");if(t==="void"){if(e!==void 0)throw new Error("Expected void");return e}else{if(t==="bigint"&&typeof e=="number")return BigInt(e);if(t==="literal"){if(this.value!==e)throw new Error("Expected a literal");return e}else if(t==="this"){if(r===void 0)throw new Error("this is undefined");return r.parse(e,r)}else if(t==="array"){if(!Array.isArray(e))throw new Error("Expected an array");return e.map(s=>this.item.parse(s,r))}else if(t==="union"||t==="enum"||t==="nativeEnum"){let s=this;for(let i of s.options)if(t==="enum"||t==="nativeEnum"){if(i===e)return e}else try{return i.parse(e,r)}catch{}throw new Error("Expected one of the union options")}else throw new Error(`Unsupported type ${t.toString()}`)}}}};function a(f){return new Proxy({},{get:(e,r)=>typeof r=="string"&&r.startsWith("is")?t=>t&&(typeof t=="object"||typeof t=="function")&&t.kind===r.slice(2).toLowerCase():r==="coerce"?()=>a({...f,coerce:!0}):r==="describe"?t=>a({...f,description:t}):(...t)=>{let s={...f,kind:r,args:t};r==="union"?s.options=t:r==="enum"?(s.options=t,s.enum=Object.fromEntries(t.map(o=>[o,o]))):r==="nativeEnum"?(s.options=Object.values(t[0]),s.enum=t[0]):r==="literal"?s.value=t[0]:r==="array"?s.item=t[0]:(r==="object"||r==="class")&&(s.shape=t[0]);let i=new p(s);if(r!=="class")return i;{let c=t[1]??class{constructor(h){Object.assign(this,h)}};Object.assign(c,i);for(let u of Object.getOwnPropertyNames(p.prototype)){let h=i[u];typeof h=="function"&&u!=="constructor"&&Object.defineProperty(c,u,{value:h})}return c}}})}var n=a({}),l=n;var d=l.object({name:l.string(),age:l.number()}),y={name:"Alice",age:30},b=d.parse(y);console.log(b);
+// node_modules/.pnpm/file+../node_modules/itty-schema/lib/index.js
+var Schema = class {
+  props;
+  constructor(props) {
+    if (typeof props === "string") {
+      this.props = { kind: props };
+    } else {
+      this.props = props;
+    }
+    Object.assign(this, props);
+  }
+  clone(props) {
+    return new this.constructor({
+      ...this,
+      ...props
+    });
+  }
+  describe(description) {
+    return this.clone({ description });
+  }
+  optional() {
+    return itty.union(this, itty.undefined());
+  }
+  nullable() {
+    return itty.union(this, itty.null());
+  }
+  nullish() {
+    return itty.union(this, itty.null(), itty.undefined());
+  }
+  extend(shape) {
+    if (this.kind === "class") {
+      return itty.class({ ...this.shape, ...shape }, this);
+    } else {
+      return itty.object({ ...this.shape, ...shape });
+    }
+  }
+  merge(shape) {
+    return this.extend(shape.shape);
+  }
+  pick(mask, ...masks) {
+    return this.pickOrOmit(typeof mask === "string" ? [mask, ...masks] : mask, true);
+  }
+  omit(mask, ...masks) {
+    return this.pickOrOmit(typeof mask === "string" ? [mask, ...masks] : mask, false);
+  }
+  pickOrOmit(mask, isPick) {
+    const keep = new Set(Array.isArray(mask) ? mask : Object.keys(mask));
+    const shape = Object.fromEntries(
+      // @ts-ignore
+      Object.entries(this.shape).filter(([key]) => isPick ? keep.has(key) : !keep.has(key))
+    );
+    if (this.kind === "class") {
+      return itty.class(shape);
+    } else {
+      return itty.object(shape);
+    }
+  }
+  partial() {
+    const shape = {};
+    for (const [key, value] of Object.entries(this.shape)) {
+      shape[key] = itty.union(value, itty.undefined());
+    }
+    if (this.kind === "class") {
+      return itty.class(shape);
+    } else {
+      return itty.object(shape);
+    }
+  }
+  deepPartial() {
+    const self = this;
+    if (this.kind === "class" || this.kind === "object") {
+      const shape = {};
+      for (const [key, value] of Object.entries(self.shape)) {
+        shape[key] = itty.union(value, itty.undefined());
+      }
+      if (this.kind === "class") {
+        return itty.class(shape);
+      } else {
+        return itty.object(shape);
+      }
+    } else if (this.kind === "array") {
+      return itty.array(self.item.deepPartial());
+    } else {
+      return itty.union(self, itty.undefined());
+    }
+  }
+  keyof() {
+    if (this.kind === "class" || this.kind === "object") {
+      return itty.enum(...Object.keys(this.shape));
+    }
+  }
+  parse(value, self) {
+    const kind = this.kind;
+    if (kind === "object" || kind === "class") {
+      const obj = this;
+      if (typeof value !== "object" || value === null) {
+        throw new Error("Expected an object");
+      }
+      const result = {};
+      for (const [key, schema] of Object.entries(obj.shape)) {
+        if (key in value) {
+          result[key] = schema.parse(value[key], this);
+        } else if (!itty.isUndefined(schema)) {
+          if (itty.isUnion(schema)) {
+            if (schema.options.some(itty.isUndefined)) {
+              continue;
+            }
+          }
+          throw new Error(`Expected ${key} in object`);
+        }
+      }
+      if (kind === "class") {
+        return new this(result);
+      }
+      return result;
+    } else if (typeof value === kind) {
+      return value;
+    } else if (kind === "any" || kind === "unknown") {
+      return value;
+    } else if (kind === "never") {
+      throw new Error("Received never");
+    } else if (kind === "void") {
+      if (value !== void 0) {
+        throw new Error("Expected void");
+      }
+      return value;
+    } else if (kind === "bigint" && typeof value === "number") {
+      return BigInt(value);
+    } else if (kind === "literal") {
+      if (this.value !== value) {
+        throw new Error("Expected a literal");
+      }
+      return value;
+    } else if (kind === "this") {
+      if (self === void 0) {
+        throw new Error(`this is undefined`);
+      }
+      return self.parse(value, self);
+    } else if (kind === "array") {
+      if (!Array.isArray(value)) {
+        throw new Error("Expected an array");
+      }
+      return value.map((item) => (
+        // @ts-ignore
+        this.item.parse(item, self)
+      ));
+    } else if (kind === "union" || kind === "enum" || kind === "nativeEnum") {
+      const s = this;
+      for (const option of s.options) {
+        if (kind === "enum" || kind === "nativeEnum") {
+          if (option === value) {
+            return value;
+          }
+        } else {
+          try {
+            return option.parse(value, self);
+          } catch (error) {
+          }
+        }
+      }
+      throw new Error("Expected one of the union options");
+    } else {
+      throw new Error(`Unsupported type ${kind.toString()}`);
+    }
+  }
+};
+function createItty(props) {
+  return new Proxy({}, {
+    get: (_, kind) => {
+      if (typeof kind === "string" && kind.startsWith("is")) {
+        return (value) => value && (typeof value === "object" || typeof value === "function") && value.kind === kind.slice(2).toLowerCase();
+      } else if (kind === "coerce") {
+        return () => createItty({ ...props, coerce: true });
+      } else if (kind === "describe") {
+        return (description) => createItty({ ...props, description });
+      } else {
+        return (...args) => {
+          const opts = {
+            ...props,
+            kind,
+            args
+          };
+          if (kind === "union") {
+            opts.options = args;
+          } else if (kind === "enum") {
+            opts.options = args;
+            opts.enum = Object.fromEntries(args.map((option) => [option, option]));
+          } else if (kind === "nativeEnum") {
+            opts.options = Object.values(args[0]);
+            opts.enum = args[0];
+          } else if (kind === "literal") {
+            opts.value = args[0];
+          } else if (kind === "array") {
+            opts.item = args[0];
+          } else if (kind === "object" || kind === "class") {
+            opts.shape = args[0];
+          }
+          const schema = new Schema(opts);
+          if (kind !== "class") {
+            return schema;
+          } else {
+            const superType = args[1];
+            const _Schema = superType ?? class _Schema {
+              constructor(value) {
+                Object.assign(this, value);
+              }
+            };
+            Object.assign(_Schema, schema);
+            for (const prop of Object.getOwnPropertyNames(Schema.prototype)) {
+              const value = schema[prop];
+              if (typeof value === "function" && prop !== "constructor") {
+                Object.defineProperty(_Schema, prop, {
+                  value
+                });
+              }
+            }
+            return _Schema;
+          }
+        };
+      }
+    }
+  });
+}
+var itty = createItty({});
+var lib_default = itty;
+
+// src/itty.ts
+var Person = lib_default.object({
+  name: lib_default.string(),
+  age: lib_default.number()
+});
+var input = { name: "Alice", age: 30 };
+var result1 = Person.parse(input);
+console.log(result1);
