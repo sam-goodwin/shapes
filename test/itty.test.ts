@@ -36,7 +36,8 @@ test("object", () => {
 test("class", () => {
   class User extends i.class({
     username: i.string(),
-    self: i.array(i.this<User>()),
+    user: i.this<User>().optional(),
+    users: i.array(i.this<User>()),
   }) {
     getUsername() {
       return this.username;
@@ -47,24 +48,33 @@ test("class", () => {
 
   const user = User.parse({
     username: "john",
-    self: [
+    user: {
+      username: "bart",
+      users: [],
+    },
+    users: [
       {
         username: "sam",
-        self: [],
+        users: [],
       },
     ],
   });
   expect(user).toBeInstanceOf(User);
   expect(user.getUsername()).toBe("john");
-  expect(user.self[0].getUsername()).toBe("sam");
+  expect(user.user!.getUsername()).toBe("bart");
+  expect(user.users[0].getUsername()).toBe("sam");
 
   expect(user).toEqual(
     new User({
       username: "john",
-      self: [
+      user: new User({
+        username: "bart",
+        users: [],
+      }),
+      users: [
         new User({
           username: "sam",
-          self: [],
+          users: [],
         }),
       ],
     })
