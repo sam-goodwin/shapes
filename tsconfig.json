@@ -1,0 +1,14 @@
+{
+  "extends": "@tsconfig/node20",
+  "include": ["src", "test"],
+  "compilerOptions": {
+    "outDir": "lib",
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "target": "ESNext",
+    "declaration": true,
+    "declarationMap": true,
+    "sourceMap": true,
+    "types": ["bun-types"]
+  }
+}
