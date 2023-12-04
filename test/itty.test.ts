@@ -160,6 +160,28 @@ test("object partial", () => {
   });
 });
 
+// test("object deepPartial", () => {
+//   const User = i.object({
+//     username: i.string(),
+//     age: i.number(),
+//     metadata: i.object({
+//       foo: i.string(),
+//     }),
+//     list: i.array(i.object({ foo: i.string() })),
+//   });
+//   const PartialUser = User.deepPartial();
+
+//   expect(i.isObject(User)).toBe(true);
+
+//   const person = PartialUser.parse({
+//     username: "person",
+//   });
+
+//   expect(person).toEqual({
+//     username: "person",
+//   });
+// });
+
 test("class", () => {
   class User extends i.class({
     username: i.string(),
@@ -427,4 +449,15 @@ test("describe", () => {
     }).shape.foo.description
   ).toBe("foo");
   expect(i.describe("foo").object({}).description).toBe("foo");
+});
+
+test("keyof", () => {
+  const User = i.object({
+    username: i.string(),
+    age: i.number(),
+  });
+
+  const UserKeys = User.keyof();
+  expect(UserKeys.parse("username")).toBe("username");
+  expect(UserKeys.parse("age")).toBe("age");
 });

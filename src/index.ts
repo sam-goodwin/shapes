@@ -118,6 +118,9 @@ export type iObject<S extends Shape = Shape> = ISchema<"object"> & {
   partial(): iObject<{
     [prop in keyof S]: iUnion<S[prop] | iUndefined>;
   }>;
+  // deepPartial(): iObject<{
+  //   [prop in keyof S]: DeepPartial<S[prop]>;
+  // }>;
 };
 export interface iClass<S extends Shape = Shape, Super = {}>
   extends ISchema<"class"> {
@@ -151,8 +154,21 @@ export interface iClass<S extends Shape = Shape, Super = {}>
   partial(): iClass<{
     [prop in keyof S]: iUnion<S[prop] | iUndefined>;
   }>;
+  // deepPartial(): iObject<{
+  //   [prop in keyof S]: DeepPartial<S[prop]>;
+  // }>;
 }
-export type iUnion<T extends iType = iType> = ISchema<"union"> & {
+
+// type DeepPartial<T extends iType> = T extends {
+//   kind: "object" | "class";
+//   shape: infer S extends Shape;
+// }
+//   ? iUnion<iObject<{ [K in keyof S]: DeepPartial<S[K]> }> | iUndefined>
+//   : T extends { item: infer Item extends iType }
+//   ? iUnion<iArray<DeepPartial<Item>> | iUndefined>
+//   : iUnion<T | iUndefined>;
+
+export type iUnion<T = iType> = ISchema<"union"> & {
   options: T[];
 };
 export type iEnum<T extends string[] = string[]> = ISchema<"enum"> & {
@@ -323,6 +339,32 @@ export class Schema<K extends Kind> {
     } else {
       // @ts-ignore
       return itty.object(shape);
+    }
+  }
+
+  public deepPartial() {
+    const self = this as any;
+    if (this.kind === "class" || this.kind === "object") {
+      const shape: any = {};
+      for (const [key, value] of Object.entries(self.shape)) {
+        shape[key] = itty.union(value as iType, itty.undefined());
+      }
+      if (this.kind === "class") {
+        return itty.class(shape);
+      } else {
+        return itty.object(shape);
+      }
+    } else if (this.kind === "array") {
+      return itty.array(self.item.deepPartial());
+    } else {
+      return itty.union(self, itty.undefined());
+    }
+  }
+
+  public keyof() {
+    if (this.kind === "class" || this.kind === "object") {
+      // @ts-ignore
+      return itty.enum(...Object.keys(this.shape));
     }
   }
 

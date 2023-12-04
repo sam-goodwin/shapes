@@ -3,15 +3,21 @@
   "version": "1.0.0",
   "description": "",
   "type": "module",
+  "files": [
+    "lib"
+  ],
+  "types": "lib/index.d.ts",
   "exports": {
     ".": {
-      "import": "./index.js"
+      "import": "./lib/index.js",
+      "types": "./lib/index.d.ts"
     }
   },
   "scripts": {
     "build": "tsc -b",
     "watch": "tsc -b -w",
-    "test": "bun test"
+    "test": "bun test",
+    "benchmark": "./benchmark/run.sh"
   },
   "keywords": [],
   "author": "",
@@ -20,8 +26,6 @@
     "@tsconfig/node20": "^20.1.2",
     "bun": "^1.0.14",
     "bun-types": "^1.0.14",
-    "ts-node": "^10.9.1",
-    "typescript": "^5.3.2",
-    "zod": "^3.22.4"
+    "typescript": "^5.3.2"
   }
 }
