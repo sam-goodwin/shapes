@@ -115,6 +115,9 @@ export type iObject<S extends Shape = Shape> = ISchema<"object"> & {
   >(
     mask: Mask
   ): iObject<Omit<S, keyof Mask>>;
+  partial(): iObject<{
+    [prop in keyof S]: iUnion<S[prop] | iUndefined>;
+  }>;
 };
 export interface iClass<S extends Shape = Shape, Super = {}>
   extends ISchema<"class"> {
@@ -145,6 +148,9 @@ export interface iClass<S extends Shape = Shape, Super = {}>
   >(
     mask: Mask
   ): iClass<Omit<S, keyof Mask>>;
+  partial(): iClass<{
+    [prop in keyof S]: iUnion<S[prop] | iUndefined>;
+  }>;
 }
 export type iUnion<T extends iType = iType> = ISchema<"union"> & {
   options: T[];
@@ -299,7 +305,21 @@ export class Schema<K extends Kind> {
     );
     if (this.kind === "class") {
       // @ts-ignore
-      return itty.class(shape, this);
+      return itty.class(shape);
+    } else {
+      // @ts-ignore
+      return itty.object(shape);
+    }
+  }
+
+  public partial() {
+    const shape: any = {};
+    for (const [key, value] of Object.entries((this as any).shape)) {
+      shape[key] = itty.union(value as iType, itty.undefined());
+    }
+    if (this.kind === "class") {
+      // @ts-ignore
+      return itty.class(shape);
     } else {
       // @ts-ignore
       return itty.object(shape);

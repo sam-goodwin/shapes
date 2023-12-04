@@ -142,6 +142,24 @@ test("object omit", () => {
   });
 });
 
+test("object partial", () => {
+  const User = i.object({
+    username: i.string(),
+    age: i.number(),
+  });
+  const PartialUser = User.partial();
+
+  expect(i.isObject(User)).toBe(true);
+
+  const person = PartialUser.parse({
+    username: "person",
+  });
+
+  expect(person).toEqual({
+    username: "person",
+  });
+});
+
 test("class", () => {
   class User extends i.class({
     username: i.string(),
@@ -272,6 +290,26 @@ test("class omit", () => {
 
   expect(person).toEqual(
     new Person({
+      username: "person",
+    })
+  );
+});
+
+test("class partial", () => {
+  class User extends i.class({
+    username: i.string(),
+    age: i.number(),
+  }) {}
+  class PartialUser extends User.partial() {}
+
+  expect(i.isClass(User)).toBe(true);
+
+  const person = PartialUser.parse({
+    username: "person",
+  });
+
+  expect(person).toEqual(
+    new PartialUser({
       username: "person",
     })
   );
