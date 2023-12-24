@@ -154,19 +154,7 @@ export interface iClass<S extends Shape = Shape, Super = {}>
   partial(): iClass<{
     [prop in keyof S]: iUnion<S[prop] | iUndefined>;
   }>;
-  // deepPartial(): iObject<{
-  //   [prop in keyof S]: DeepPartial<S[prop]>;
-  // }>;
 }
-
-// type DeepPartial<T extends iType> = T extends {
-//   kind: "object" | "class";
-//   shape: infer S extends Shape;
-// }
-//   ? iUnion<iObject<{ [K in keyof S]: DeepPartial<S[K]> }> | iUndefined>
-//   : T extends { item: infer Item extends iType }
-//   ? iUnion<iArray<DeepPartial<Item>> | iUndefined>
-//   : iUnion<T | iUndefined>;
 
 export type iUnion<T = iType> = ISchema<"union"> & {
   options: T[];
@@ -202,7 +190,10 @@ type Types = {
   literal<const V>(value: V): iLiteral<V>;
   array<Item extends iType>(item: Item): iArray<Item>;
   object<S extends Shape>(shape: S): iObject<S>;
-  class<S extends Shape>(shape: S): iClass<S>;
+  class<S extends Shape, Traits extends iTraits = {}>(
+    shape: S,
+    traits?: Traits
+  ): iClass<S, Traits>;
   union<T extends iType[]>(...options: T): iUnion<T[number]>;
   enum<T extends string[]>(...options: T): iEnum<T>;
   nativeEnum<T extends EnumLike>(options: T): iNativeEnum<T>;
@@ -262,19 +253,22 @@ export interface ISchema<K extends Kind> {
       [trait in Trait]: Data;
     };
   };
+  apply<Traits extends iTraits>(
+    traits: Traits
+  ): this & {
+    traits: Traits;
+  };
 }
 export class Schema<K extends Kind, Traits extends iTraits> {
   readonly props: SchemaOptions<K, Traits>;
-  readonly traits: Traits;
+
   constructor(props: SchemaOptions<K, Traits> | K) {
     if (typeof props === "string") {
       this.props = { kind: props };
     } else {
       this.props = props;
     }
-    Object.assign(this, props);
-    // @ts-ignore
-    this.traits = props.traits ?? {};
+    Object.assign(this, this.props);
   }
 
   public apply<Trait extends string, Data>(
@@ -284,21 +278,48 @@ export class Schema<K extends Kind, Traits extends iTraits> {
     traits: {
       [trait in Trait]: Data;
     };
-  } {
+  };
+
+  public apply<Traits extends iTraits>(
+    traits: Traits
+  ): this & {
+    traits: Traits;
+  };
+
+  public apply(...args: [string, any] | [iTraits]) {
+    // @ts-ignore
+    const traits =
+      typeof args[0] === "string" ? { [args[0]]: args[1] } : args[0];
+
     return this.clone({
-      ...this.props,
       traits: {
+        // @ts-ignore
         ...this.traits,
-        [trait]: data,
+        ...traits,
       },
     });
   }
 
   private clone(props: any): this {
-    return new (this.constructor as any)({
-      ...this,
-      ...props,
-    });
+    if (this.kind === "class") {
+      // @ts-ignore
+      const New = cloneClass(this);
+      // @ts-ignore
+      New.props = {
+        ...this.props,
+        ...props,
+      };
+      // @ts-ignore
+      New.traits = New.props.traits;
+      // @ts-ignore
+      return New;
+    } else {
+      const New = new (this.constructor as any)({
+        ...this,
+        ...props,
+      });
+      return New;
+    }
   }
 
   public describe(description: string): this {
@@ -522,35 +543,80 @@ function createItty<Props extends Record<string, any>>(props: Props): Itty {
               opts.item = args[0];
             } else if (kind === "object" || kind === "class") {
               opts.shape = args[0];
+              opts.traits = args[1] ?? {};
             }
             const schema = new Schema(opts);
-            if (kind !== "class") {
-              return schema;
-            } else {
-              const superType = args[1];
-              const _Schema =
-                superType ??
-                class _Schema {
-                  constructor(value: any) {
-                    Object.assign(this, value);
-                  }
-                };
-              Object.assign(_Schema, schema);
-              for (const prop of Object.getOwnPropertyNames(Schema.prototype)) {
-                const value = (schema as any)[prop];
-                if (typeof value === "function" && prop !== "constructor") {
-                  Object.defineProperty(_Schema, prop, {
-                    value,
-                  });
-                }
-              }
-              return _Schema;
+            if (kind === "class") {
+              return createClass(schema, args[1]);
             }
+            return schema;
           };
         }
       },
     }
   ) as any;
+}
+
+function createClass(schema: Schema<any, any>, superType?: any) {
+  const _Schema =
+    superType ??
+    class _Schema {
+      constructor(value: any) {
+        Object.assign(this, value);
+      }
+    };
+  Object.assign(_Schema, schema);
+  const prototype = Object.getPrototypeOf(schema);
+  const properties = Object.getOwnPropertyNames(prototype);
+
+  for (const prop of properties) {
+    const value = (schema as any)[prop];
+    const propDescriptor = Object.getOwnPropertyDescriptor(prototype, prop)!;
+    if (propDescriptor.get || propDescriptor.set) {
+      Object.defineProperty(_Schema, prop, propDescriptor);
+    } else if (typeof value === "function" && prop !== "constructor") {
+      Object.defineProperty(_Schema, prop, {
+        value,
+      });
+    } else if (prop !== "length" && prop !== "prototype" && prop !== "name") {
+      _Schema[prop] = value;
+    }
+  }
+  return _Schema;
+}
+
+function cloneClass<T>(
+  original: new (...args: any[]) => T
+): new (...args: any[]) => T {
+  // Create a new class with the same constructor as the original
+  const cloned = function (...args: any[]) {
+    return new original(...args);
+  } as any;
+
+  // Copy static properties and methods
+  Object.assign(cloned, original);
+
+  // Copy prototype properties and methods
+  cloned.prototype = Object.create(original.prototype);
+
+  for (const prop of Object.getOwnPropertyNames(original)) {
+    const value = (original as any)[prop];
+    const propDescriptor = Object.getOwnPropertyDescriptor(original, prop)!;
+
+    if (propDescriptor.get || propDescriptor.set) {
+      Object.defineProperty(cloned, prop, propDescriptor);
+    } else if (typeof value === "function") {
+      if (prop !== "constructor") {
+        Object.defineProperty(cloned, prop, {
+          value,
+        });
+      }
+    } else if (prop !== "length" && prop !== "prototype" && prop !== "name") {
+      cloned[prop] = value;
+    }
+  }
+
+  return cloned;
 }
 
 export const itty = createItty({}) as Itty;
