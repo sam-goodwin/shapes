@@ -239,6 +239,7 @@ export interface Schema<K extends Kind> {
 export interface ISchema<K extends Kind> {
   kind: K;
   description: string | undefined;
+
   describe(description: string): this;
   optional<Self extends iType>(this: Self): iUnion<Self | iUndefined>;
   nullable<Self extends iType>(this: Self): iUnion<Self | iNull>;

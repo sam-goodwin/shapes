@@ -8,6 +8,7 @@
     "benchmark:bundle": "./run.sh"
   },
   "dependencies": {
+    "@typescript/analyze-trace": "^0.10.1",
     "itty-schema": "file:../",
     "yup": "^1.3.2"
   },
