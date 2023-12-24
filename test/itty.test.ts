@@ -461,3 +461,16 @@ test("keyof", () => {
   expect(UserKeys.parse("username")).toBe("username");
   expect(UserKeys.parse("age")).toBe("age");
 });
+
+test("trait", () => {
+  //
+  class Foo extends i.class({
+    fooId: i.string().apply("dynamo:isPK", true),
+  }) {}
+
+  expect(Foo.shape.fooId.traits).toEqual({ "dynamo:isPK": true });
+
+  const foo = Foo.parse({ fooId: "foo" });
+  expect(foo).toEqual(new Foo({ fooId: "foo" }));
+  expect(foo.fooId).toBe("foo");
+});

@@ -51,7 +51,7 @@ type Simplify<T> = { [KeyType in keyof T]: T[KeyType] } & {};
 type Shape = {
   [property: string]: iType;
 };
-type Kind = keyof Types;
+export type Kind = keyof Types;
 export type iType =
   | iNever
   | iAny
@@ -225,13 +225,18 @@ type Itty = Types & {
   >;
 };
 
-export interface SchemaOptions<K extends Kind> {
+type iTraits = {
+  [trait: string]: any;
+};
+
+export interface SchemaOptions<K extends Kind, Traits extends iTraits> {
   kind: K;
   description?: string;
+  traits?: Traits;
   [key: string]: any;
 }
 
-export interface Schema<K extends Kind> {
+export interface Schema<K extends Kind, Traits extends iTraits> {
   kind: K;
   description: string | undefined;
 }
@@ -249,16 +254,44 @@ export interface ISchema<K extends Kind> {
     value: any
   ): InstanceType<Self>;
   parse<Self extends iType>(this: Self, value: any): valueOf<Self, never>;
+  apply<Trait extends string, Data>(
+    trait: Trait,
+    data: Data
+  ): this & {
+    traits: {
+      [trait in Trait]: Data;
+    };
+  };
 }
-export class Schema<K extends Kind> {
-  readonly props: SchemaOptions<K>;
-  constructor(props: SchemaOptions<K> | K) {
+export class Schema<K extends Kind, Traits extends iTraits> {
+  readonly props: SchemaOptions<K, Traits>;
+  readonly traits: Traits;
+  constructor(props: SchemaOptions<K, Traits> | K) {
     if (typeof props === "string") {
       this.props = { kind: props };
     } else {
       this.props = props;
     }
     Object.assign(this, props);
+    // @ts-ignore
+    this.traits = props.traits ?? {};
+  }
+
+  public apply<Trait extends string, Data>(
+    trait: Trait,
+    data: Data
+  ): this & {
+    traits: {
+      [trait in Trait]: Data;
+    };
+  } {
+    return this.clone({
+      ...this.props,
+      traits: {
+        ...this.traits,
+        [trait]: data,
+      },
+    });
   }
 
   private clone(props: any): this {
