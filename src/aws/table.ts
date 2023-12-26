@@ -198,6 +198,7 @@ export function table<E extends Record<string, Entity>>(
       }
     }
 
+    // @ts-ignore
     async query<const Q extends QueryExpression<E>>(
       query: Q,
       options?: {
@@ -361,10 +362,6 @@ export interface TableSpec<E extends Record<string, Entity>> {
 }
 
 export type Table<E extends Entities> = {
-  [entityName in keyof E]: E[entityName]["traits"]["sk"] extends undefined
-    ? GetEntity<E[entityName]>
-    : GetEntity<E[entityName]> & QueryEntity<E[entityName]>;
-} & {
   get<const Key extends KeysOfEntities<E>>(
     key: Key
   ): Promise<{
@@ -468,59 +465,3 @@ type BatchPutItems<E extends Entities> = [
   valueOf<E[keyof E]>,
   ...valueOf<E[keyof E]>[]
 ];
-
-type GetEntity<E extends Entity> = {
-  get<const K extends ShortKeyOfEntity<E>>(
-    key: K
-  ): Promise<{
-    item: valueOf<E> | undefined;
-  }>;
-  get<
-    const Keys extends readonly [
-      ShortKeyOfEntity<E>,
-      ShortKeyOfEntity<E>,
-      ...ShortKeyOfEntity<E>[]
-    ]
-  >(
-    ...keys: Keys
-  ): Promise<{
-    items: {
-      [i in keyof Keys]: Extract<valueOf<E>, Widen<Keys[i]>> | undefined;
-    };
-  }>;
-  get<
-    const Keys extends readonly [
-      ShortKeyOfEntity<E>,
-      ShortKeyOfEntity<E>,
-      ...ShortKeyOfEntity<E>[]
-    ]
-  >(
-    keys: Keys
-  ): Promise<{
-    items: {
-      [i in keyof Keys]: Extract<valueOf<E>, Keys[i]> | undefined;
-    };
-  }>;
-};
-
-type QueryEntity<E extends Entity> = {
-  // query<const Q extends QueryExpression<E>>(
-  //   query: Q,
-  //   options?: {
-  //     lastEvaluatedKey?: LastEvaluatedKey<E, Q>;
-  //   }
-  // ): Promise<{
-  //   items: QueriedItem<E, Q>[];
-  //   lastEvaluatedKey: LastEvaluatedKey<E, Q> | undefined;
-  // }>;
-
-  query<K extends Simplify<PK<E> & SortKeyExpression<E>>>(
-    key: K,
-    options?: {
-      lastEvaluatedKey?: KeyOfEntity<E>;
-    }
-  ): Promise<{
-    items: valueOf<E>[];
-    lastEvaluatedKey: Simplify<KeyOfEntity<E> | undefined>;
-  }>;
-};

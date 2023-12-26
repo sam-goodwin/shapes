@@ -69,7 +69,7 @@ beforeAll(async () => {
 
 class User extends entity("User", {
   pk: ["userId"],
-  sk: ["name", "value"],
+  sk: ["name", "value", "$type"],
   attributes: {
     userId: i.string(),
     name: i.string(),
@@ -83,6 +83,7 @@ class User extends entity("User", {
 
 class Chat extends entity("Chat", {
   pk: ["chatId"],
+  sk: ["$type"],
   attributes: {
     chatId: i.string(),
     userId: i.string(),
@@ -91,7 +92,7 @@ class Chat extends entity("Chat", {
 
 class Message extends entity("Message", {
   pk: ["chatId"],
-  sk: ["messageId"],
+  sk: ["messageId", "$type"],
   attributes: {
     chatId: i.string(),
     messageId: i.string(),
@@ -229,6 +230,7 @@ test("deleteBatch", async () => {
 // type-only tests
 async function foo() {
   const k = Chat.Key({
+    $type: "Chat",
     chatId: "chat",
   });
   async function _() {
@@ -236,41 +238,42 @@ async function foo() {
       item: Chat | undefined;
     };
 
-    const { item: chat2 } = (await chatTable.chat.get({
+    const { item: chat2 } = (await chatTable.get({
+      $type: "Chat",
       chatId: "chatID",
     })) satisfies {
       item: Chat | undefined;
     };
 
-    const chat2_1 = (await chatTable.chat.get(
+    const chat2_1 = (await chatTable.get(
       {
+        $type: "Chat",
         chatId: "chatID",
       },
       {
+        $type: "Chat",
         chatId: "chatID",
       }
     )) satisfies {
       items: readonly [Chat | undefined, Chat | undefined];
     };
 
-    const kk = Chat.Key({
-      chatId: "chat1",
-    }) satisfies {
-      readonly chatId: "chat1";
-      $type: "Chat";
-    };
-
     const {
       items: [chat3, chat4, message_2],
     } = (await chatTable.get(
-      kk,
-      Chat.Key({
+      {
+        $type: "Chat",
+        chatId: "chat1",
+      },
+      {
+        $type: "Chat",
         chatId: "chat3",
-      }),
-      Message.Key({
+      },
+      {
         chatId: "chat3",
+        $type: "Message",
         messageId: "message",
-      })
+      }
     )) satisfies {
       items: readonly [Chat | undefined, Chat | undefined, Message | undefined];
     };
@@ -278,19 +281,24 @@ async function foo() {
     const {
       items: [chat3_1, chat4_1, message_1],
     } = (await chatTable.get([
-      kk,
-      Chat.Key({
+      {
+        $type: "Chat",
+        chatId: "chat1",
+      },
+      {
+        $type: "Chat",
         chatId: "chat3",
-      }),
-      Message.Key({
+      },
+      {
         chatId: "chat3",
         messageId: "message",
-      }),
+        $type: "Message",
+      },
     ])) satisfies {
       items: readonly [Chat | undefined, Chat | undefined, Message | undefined];
     };
 
-    const { items: users, lastEvaluatedKey } = (await chatTable.user.query({
+    const { items: users, lastEvaluatedKey } = (await chatTable.query({
       userId: "user",
       name: "sam",
       value: {
@@ -301,7 +309,7 @@ async function foo() {
       lastEvaluatedKey: typeof User.Key.$infer | undefined;
     };
 
-    const { items: users3 } = await chatTable.user.query({
+    const { items: users3 } = await chatTable.query({
       userId: "123",
       name: "",
     });
@@ -398,6 +406,7 @@ async function foo() {
         messageId: "messageId",
       },
       Message.Key({
+        $type: "Message",
         chatId: "chat-id",
         messageId: "message-Id",
       })

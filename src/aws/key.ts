@@ -14,22 +14,24 @@ export function isKey(a: any): a is Key {
 }
 
 export type KeyOfEntity<E extends Entity> = Simplify<
-  {
-    $type: E["traits"]["fqn"];
-  } & (E["traits"]["sk"] extends undefined ? PK<E> : PK<E> & SK<E>)
+  E["traits"]["sk"] extends undefined ? PK<E> : PK<E> & SK<E>
 >;
 
 export type ShortKeyOfEntity<E extends Entity> = Simplify<
   {
-    [pk in E["traits"]["pk"][number]]: valueOfShape<E["shape"], any>[Extract<
-      pk,
-      keyof valueOfShape<E["shape"], any>
-    >];
+    [pk in E["traits"]["pk"][number]]: pk extends "$type"
+      ? E["traits"]["fqn"]
+      : valueOfShape<E["shape"], any>[Extract<
+          pk,
+          keyof valueOfShape<E["shape"], any>
+        >];
   } & {
-    [sk in E["traits"]["sk"][number]]: valueOfShape<E["shape"], any>[Extract<
-      sk,
-      keyof valueOfShape<E["shape"], any>
-    >];
+    [sk in E["traits"]["sk"][number]]: sk extends "$type"
+      ? E["traits"]["fqn"]
+      : valueOfShape<E["shape"], any>[Extract<
+          sk,
+          keyof valueOfShape<E["shape"], any>
+        >];
   }
 >;
 

@@ -47,17 +47,13 @@ export function entity<
   Key: {
     $infer: Simplify<
       {
-        $type: FQN;
+        [pk in PK[number]]: pk extends "$type"
+          ? FQN
+          : valueOfShape<S, any>[Extract<pk, keyof valueOfShape<S, any>>];
       } & {
-        [pk in PK[number]]: valueOfShape<S, any>[Extract<
-          pk,
-          keyof valueOfShape<S, any>
-        >];
-      } & {
-        [sk in SK[number]]: valueOfShape<S, any>[Extract<
-          sk,
-          keyof valueOfShape<S, any>
-        >];
+        [sk in SK[number]]: sk extends "$type"
+          ? FQN
+          : valueOfShape<S, any>[Extract<sk, keyof valueOfShape<S, any>>];
       }
     >;
     <
@@ -66,7 +62,7 @@ export function entity<
     >(
       this: Self,
       key: K
-    ): Simplify<K & { $type: FQN }>;
+    ): Simplify<K>;
   };
 } {
   // @ts-expect-error - types are cray
@@ -88,14 +84,16 @@ export function entity<
   };
 }
 
-type AllowedPrimaryKeys<S> = keyof Pick<
-  S,
-  Extract<
-    {
-      [K in keyof S]: valueOf<S[K]> extends string | number | undefined
-        ? K
-        : never;
-    }[keyof S],
-    string
-  >
->;
+type AllowedPrimaryKeys<S> =
+  | "$type"
+  | keyof Pick<
+      S,
+      Extract<
+        {
+          [K in keyof S]: valueOf<S[K]> extends string | number | undefined
+            ? K
+            : never;
+        }[keyof S],
+        string
+      >
+    >;
