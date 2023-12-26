@@ -1,6 +1,6 @@
 {
-  "name": "itty-schema",
-  "version": "0.0.1",
+  "name": "shapes",
+  "version": "0.0.2",
   "description": "",
   "type": "module",
   "files": [
@@ -11,6 +11,10 @@
     ".": {
       "import": "./lib/index.js",
       "types": "./lib/index.d.ts"
+    },
+    "./aws/dynamodb": {
+      "import": "./lib/aws/dynamodb.js",
+      "types": "./lib/aws/dynamodb.d.ts"
     }
   },
   "scripts": {
@@ -25,9 +29,23 @@
   "author": "",
   "license": "ISC",
   "devDependencies": {
+    "@aws-sdk/client-dynamodb": "3.478.0",
+    "@aws-sdk/lib-dynamodb": "3.478.0",
     "@tsconfig/node20": "^20.1.2",
-    "bun": "^1.0.14",
     "bun-types": "^1.0.14",
-    "typescript": "^5.3.2"
+    "bun": "^1.0.14",
+    "typescript": "^5.3.3"
+  },
+  "peerDependencies": {
+    "@aws-sdk/client-dynamodb": "^3.478.0",
+    "@aws-sdk/lib-dynamodb": "^3.478.0"
+  },
+  "peerDependenciesMeta": {
+    "@aws-sdk/client-dynamodb": {
+      "optional": true
+    },
+    "@aws-sdk/lib-dynamodb": {
+      "optional": true
+    }
   }
 }

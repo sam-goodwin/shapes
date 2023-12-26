@@ -11,6 +11,7 @@
     "sourceMap": true,
     "types": ["bun-types"],
     "strict": true,
+    "strictNullChecks": true,
     "exactOptionalPropertyTypes": true
   }
 }
