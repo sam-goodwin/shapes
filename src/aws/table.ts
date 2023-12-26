@@ -2,6 +2,7 @@ import {
   BatchGetCommand,
   BatchGetCommandInput,
   BatchWriteCommand,
+  DeleteCommand,
   DynamoDBDocumentClient,
   GetCommand,
   PutCommand,
@@ -115,7 +116,7 @@ export function table<E extends Record<string, Entity>>(
         );
 
         return {
-          item: parseItem(response.Item),
+          item: response.Item ? parseItem(response.Item) : undefined,
         };
       } else {
         throw new Error(
@@ -140,7 +141,9 @@ export function table<E extends Record<string, Entity>>(
           })
         );
         return {
-          unprocessedItems: response.UnprocessedItems,
+          unprocessedItems: response.UnprocessedItems?.[this.tableName]?.map(
+            (item) => parseItem(item.PutRequest?.Item)
+          ),
         };
       } else if (rest.length === 0) {
         const entity = getEntityFor(item);
@@ -160,6 +163,38 @@ export function table<E extends Record<string, Entity>>(
           ...(entity.marshall<any>(item) as any),
           ...createKey(item),
         };
+      }
+    }
+
+    async delete(item: any, ...rest: any[]): Promise<any> {
+      if (Array.isArray(item) || rest.length > 0) {
+        const items = Array.isArray(item) ? item : [item, ...rest];
+        const failed: any[] = [];
+        const response = await this.client.send(
+          new BatchWriteCommand({
+            RequestItems: {
+              [this.tableName]: items.map((item) => ({
+                DeleteRequest: {
+                  Key: createKey(item),
+                },
+              })),
+            },
+          })
+        );
+        return {
+          unprocessedItems: response.UnprocessedItems,
+        };
+      } else if (rest.length === 0) {
+        await this.client.send(
+          new DeleteCommand({
+            TableName: this.tableName,
+            Key: createKey(item),
+          })
+        );
+        // TODO: support return values, condition expressions, etc.
+        return {};
+      } else {
+        throw new Error(`Invalid arguments: ${[item, ...rest]}`);
       }
     }
 
@@ -350,6 +385,7 @@ export type Table<E extends Entities> = {
     unprocessedKeys?: KeysOfEntities<E>[];
     consumedCapacity?: number;
   }>;
+
   put<Items extends valueOf<E[keyof E]>>(
     item: Items
   ): Promise<{
@@ -365,6 +401,19 @@ export type Table<E extends Entities> = {
   ): Promise<{
     unprocessedKeys: valueOf<E[keyof E]>[] | undefined;
   }>;
+
+  delete<Items extends valueOf<E[keyof E]>>(item: Items): Promise<{}>;
+  delete<const Items extends BatchPutItems<E>>(
+    ...items: Items
+  ): Promise<{
+    unprocessedKeys: valueOf<E[keyof E]>[];
+  }>;
+  delete<const Items extends BatchPutItems<E>>(
+    items: Items
+  ): Promise<{
+    unprocessedKeys: valueOf<E[keyof E]>[] | undefined;
+  }>;
+
   query: {
     <const Q extends QueryExpression<E>>(
       query: Q,

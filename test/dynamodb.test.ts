@@ -147,7 +147,7 @@ test("put, get & query Message", async () => {
   expect(items).toEqual([message]);
 });
 
-test("putBatch", async () => {
+test("batch put/get & query.iter", async () => {
   const message1 = new Message({
     chatId: "chat-id",
     messageId: "message-id-1",
@@ -165,6 +165,65 @@ test("putBatch", async () => {
 
   const result = await chatTable.get(message1, message2);
   expect(result.items).toEqual([message1, message2]);
+
+  const items = [];
+  for await (const item of chatTable.query.iter({
+    chatId: "chat-id",
+    messageId: {
+      $beginsWith: "message-id-",
+    },
+  })) {
+    items.push(item);
+  }
+  expect(items).toEqual([message1, message2]);
+});
+
+test("delete", async () => {
+  const message = new Message({
+    chatId: "delete-chat-id",
+    messageId: "delete-message-id",
+    userId: "user-id",
+    message: "message",
+  });
+
+  await chatTable.put(message);
+
+  const result = await chatTable.get(message);
+  expect(result.item).toEqual(message);
+
+  await chatTable.delete(message);
+
+  const result2 = await chatTable.get(message);
+  expect(result2.item).toBeUndefined();
+});
+
+test("deleteBatch", async () => {
+  const message1 = new Message({
+    chatId: "batch-delete-chat-id-1",
+    messageId: "batch-delete-message-id-1",
+    userId: "user-id",
+    message: "message",
+  });
+
+  const message2 = new Message({
+    chatId: "batch-delete-chat-id-1",
+    messageId: "batch-delete-message-id-2",
+    userId: "user-id",
+    message: "message",
+  });
+
+  await chatTable.put(message1, message2);
+
+  const result = await chatTable.get(message1, message2);
+  expect(result.items).toEqual([message1, message2]);
+
+  await chatTable.delete(message1, message2);
+
+  const result2 = await chatTable.get(message1, message2);
+  expect(result2.items).toEqual([undefined, undefined]);
+
+  const result3 = await chatTable.query({ chatId: "batch-delete-chat-id-1" });
+  expect(result3.items).toEqual([]);
 });
 
 // type-only tests
