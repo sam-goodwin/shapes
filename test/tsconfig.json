@@ -1,5 +1,8 @@
 {
   "compilerOptions": {
-    "types": ["bun-types"]
+    "types": ["bun-types"],
+    "noEmit": true,
+    "strict": true,
+    "strictNullChecks": true
   }
 }

@@ -1,14 +1,71 @@
-import { test } from "bun:test";
+import { test, beforeAll, expect } from "bun:test";
 
 import i from "../src/index.js";
 import {
   LastEvaluatedKey as _LastEvaluatedKey,
-  QueryExpression,
   entity,
   table,
 } from "../src/aws/dynamodb.js";
-import { DynamoDBDocumentClient } from "@aws-sdk/lib-dynamodb";
-import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
+import {
+  BatchWriteCommand,
+  DynamoDBDocumentClient,
+  ScanCommand,
+} from "@aws-sdk/lib-dynamodb";
+import { DynamoDBClient, CreateTableCommand } from "@aws-sdk/client-dynamodb";
+
+const client = new DynamoDBClient({
+  endpoint: "http://0.0.0.0:4566",
+});
+const documentClient = DynamoDBDocumentClient.from(client);
+
+beforeAll(async () => {
+  try {
+    await client.send(
+      new CreateTableCommand({
+        TableName: "test_table",
+        KeySchema: [
+          { AttributeName: "$pk", KeyType: "HASH" },
+          { AttributeName: "$sk", KeyType: "RANGE" },
+        ],
+        AttributeDefinitions: [
+          { AttributeName: "$pk", AttributeType: "S" },
+          { AttributeName: "$sk", AttributeType: "S" },
+        ],
+        ProvisionedThroughput: {
+          ReadCapacityUnits: 5,
+          WriteCapacityUnits: 5,
+        },
+      })
+    );
+  } catch (err: any) {
+    console.log("Table already exists");
+  }
+
+  let params = {
+    TableName: "test_table",
+    ConsistentRead: true,
+  };
+  while (true) {
+    const scan = await documentClient.send(new ScanCommand(params));
+    if (scan.Items === undefined || scan.Items.length === 0) {
+      break;
+    }
+    const deleteRequests = scan.Items?.map((item) => ({
+      DeleteRequest: {
+        Key: {
+          $pk: item["$pk"],
+          $sk: item["$sk"],
+        },
+      },
+    }));
+    const batchParams = {
+      RequestItems: {
+        test_table: deleteRequests,
+      },
+    };
+    await documentClient.send(new BatchWriteCommand(batchParams));
+  }
+});
 
 class User extends entity("User", {
   pk: ["userId"],
@@ -63,24 +120,78 @@ class ChatTable extends table({
   message: Message,
 }) {}
 
-test("dynamodb", async () => {
-  const documentClient = DynamoDBDocumentClient.from(new DynamoDBClient({}));
+const chatTable = new ChatTable({
+  tableName: "test_table",
+  client: documentClient,
+});
 
-  const chatTable = new ChatTable(documentClient);
+test("put, get & query Message", async () => {
+  const message = new Message({
+    chatId: "chat-id",
+    messageId: "message-id",
+    userId: "user-id",
+    message: "message",
+  });
 
+  await chatTable.put(message);
+
+  const result = await chatTable.get(message);
+  expect(result.item).toEqual(message);
+
+  const { items } = await chatTable.query({
+    chatId: "chat-id",
+    messageId: {
+      $beginsWith: "mess",
+    },
+  });
+  expect(items).toEqual([message]);
+});
+
+test("putBatch", async () => {
+  const message1 = new Message({
+    chatId: "chat-id",
+    messageId: "message-id-1",
+    userId: "user-id",
+    message: "message",
+  });
+  const message2 = new Message({
+    chatId: "chat-id",
+    messageId: "message-id-2",
+    userId: "user-id",
+    message: "message",
+  });
+
+  await chatTable.put(message1, message2);
+
+  const result = await chatTable.get(message1, message2);
+  expect(result.items).toEqual([message1, message2]);
+});
+
+// type-only tests
+async function foo() {
+  const k = Chat.Key({
+    chatId: "chat",
+  });
   async function _() {
-    const chat1 = (await chatTable.get(
-      Chat.Key({
-        chatId: "chat",
-      })
-    )) satisfies {
-      item: Chat;
+    const { item: chat1 } = (await chatTable.get(k)) satisfies {
+      item: Chat | undefined;
     };
 
-    const chat2 = (await chatTable.chat.get({
+    const { item: chat2 } = (await chatTable.chat.get({
       chatId: "chatID",
-    })) satisfies Chat & {
-      readonly chatId: "chatID";
+    })) satisfies {
+      item: Chat | undefined;
+    };
+
+    const chat2_1 = (await chatTable.chat.get(
+      {
+        chatId: "chatID",
+      },
+      {
+        chatId: "chatID",
+      }
+    )) satisfies {
+      items: readonly [Chat | undefined, Chat | undefined];
     };
 
     const kk = Chat.Key({
@@ -91,7 +202,7 @@ test("dynamodb", async () => {
     };
 
     const {
-      items: [chat3, chat4, message],
+      items: [chat3, chat4, message_2],
     } = (await chatTable.get(
       kk,
       Chat.Key({
@@ -107,7 +218,7 @@ test("dynamodb", async () => {
 
     const {
       items: [chat3_1, chat4_1, message_1],
-    } = await chatTable.get([
+    } = (await chatTable.get([
       kk,
       Chat.Key({
         chatId: "chat3",
@@ -116,7 +227,9 @@ test("dynamodb", async () => {
         chatId: "chat3",
         messageId: "message",
       }),
-    ]);
+    ])) satisfies {
+      items: readonly [Chat | undefined, Chat | undefined, Message | undefined];
+    };
 
     const { items: users, lastEvaluatedKey } = (await chatTable.user.query({
       userId: "user",
@@ -126,7 +239,7 @@ test("dynamodb", async () => {
       },
     })) satisfies {
       items: User[];
-      lastEvaluatedKey: typeof User.Key.$infer;
+      lastEvaluatedKey: typeof User.Key.$infer | undefined;
     };
 
     const { items: users3 } = await chatTable.user.query({
@@ -166,7 +279,7 @@ test("dynamodb", async () => {
         messageId: {
           $beginsWith: "msg-",
         },
-      } satisfies ChatTable.Query;
+      } as const satisfies ChatTable.Query;
       let lastEvaluatedKey:
         | ChatTable.LastEvaluatedKey<typeof query>
         | undefined;
@@ -179,6 +292,38 @@ test("dynamodb", async () => {
         lastEvaluatedKey = response.lastEvaluatedKey;
       } while (lastEvaluatedKey);
       return items;
+    }
+
+    async function queryMessages_2() {
+      const query = {
+        chatId: "chat-id",
+        messageId: {
+          $beginsWith: "msg-",
+        },
+      } as const satisfies ChatTable.Query;
+
+      const messages: Message[] = [];
+      for await (const message of chatTable.query.iter(query)) {
+        messages.push(message);
+      }
+      return messages;
+    }
+
+    async function queryMessages_3<Q extends ChatTable.Query>(
+      query: Q,
+      lastEvaluatedKey?: ChatTable.LastEvaluatedKey<Q> | undefined
+    ): Promise<ChatTable.QueryItem<Q>[]> {
+      const response = await chatTable.query(query, {
+        lastEvaluatedKey,
+      });
+      if (response.lastEvaluatedKey) {
+        return [
+          ...(response.items ?? []),
+          ...(await queryMessages_3(query, response.lastEvaluatedKey)),
+        ] as ChatTable.QueryItem<Q>[];
+      } else {
+        return response.items as ChatTable.QueryItem<Q>[];
+      }
     }
 
     // @ts-expect-error - order must be userId -> name -> value for sort ket
@@ -199,10 +344,10 @@ test("dynamodb", async () => {
       })
     );
     const [message1, message2] = items;
-    const t: "Message" = message.$type;
-    const m: Message = message1;
+    const t: "Message" | undefined = message1?.$type;
+    const m: Message | undefined = message1;
     // @ts-expect-error
-    const m2: Chat = message1;
+    const m2: Chat | undefined = message1;
 
     const result = await chatTable.query({
       chatId: "",
@@ -212,4 +357,4 @@ test("dynamodb", async () => {
     });
     result.items[0];
   }
-});
+}

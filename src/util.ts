@@ -8,7 +8,9 @@ export type OptionalKeys<S extends Shape> = {
     : never;
 }[keyof S];
 
-export type Simplify<T> = { [KeyType in keyof T]: T[KeyType] } & {};
+export type NotUndefined<T> = Exclude<T, undefined>;
+
+export type Simplify<T> = T extends infer U ? { [K in keyof U]: U[K] } : never;
 
 export type Widen<T> = T extends (...args: any[]) => any
   ? T
@@ -31,5 +33,9 @@ export type Widen<T> = T extends (...args: any[]) => any
       [i in keyof T]: Widen<T[i]>;
     }
   : {
-      [k in keyof T]: Widen<T[k]>;
+      [k in keyof T]: k extends "$type" ? T[k] : Widen<T[k]>;
     };
+
+export function assertNever(x: never): never {
+  throw new Error("Unexpected object: " + x);
+}

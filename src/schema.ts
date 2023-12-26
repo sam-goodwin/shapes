@@ -149,7 +149,7 @@ export class Schema<K extends Kind, Traits extends iTraits> {
   public extend(shape: Shape) {
     if (this.kind === "class") {
       // @ts-ignore
-      return itty.class({ ...this.shape, ...shape }, this);
+      return itty.class({ ...this.shape, ...shape }, undefined, this);
     } else {
       // @ts-ignore
       return itty.object({ ...this.shape, ...shape });

@@ -60,7 +60,7 @@ export function createItty<Props extends Record<string, any>>(
             }
             const schema = new Schema(opts);
             if (kind === "class") {
-              return createClass(schema, args[1]);
+              return createClass(schema, args[1], args[2]);
             }
             return schema;
           };
@@ -70,7 +70,7 @@ export function createItty<Props extends Record<string, any>>(
   ) as any;
 }
 
-function createClass(schema: Schema<any, any>, superType?: any) {
+function createClass(schema: Schema<any, any>, traits?: any, superType?: any) {
   const _Schema =
     superType ??
     class _Schema {
@@ -78,6 +78,11 @@ function createClass(schema: Schema<any, any>, superType?: any) {
         Object.assign(this, value);
       }
     };
+  // TODO: deep merge
+  _Schema.traits = {
+    ...(superType?.traits ?? {}),
+    ...(traits ?? {}),
+  };
   Object.assign(_Schema, schema);
   const prototype = Object.getPrototypeOf(schema);
   const properties = Object.getOwnPropertyNames(prototype);
@@ -92,6 +97,7 @@ function createClass(schema: Schema<any, any>, superType?: any) {
         value,
       });
     } else if (prop !== "length" && prop !== "prototype" && prop !== "name") {
+      // @ts-ignore
       _Schema[prop] = value;
     }
   }

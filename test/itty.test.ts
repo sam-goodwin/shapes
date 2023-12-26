@@ -1,6 +1,7 @@
-import i, { valueOf } from "../src/index.js";
-
 import { test, expect } from "bun:test";
+
+import i from "../src/index.js";
+import { valueOf } from "../src/valueOf.js";
 
 test("object", () => {
   const User = i.object({
