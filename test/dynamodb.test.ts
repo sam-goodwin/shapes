@@ -11,7 +11,11 @@ import {
   DynamoDBDocumentClient,
   ScanCommand,
 } from "@aws-sdk/lib-dynamodb";
-import { DynamoDBClient, CreateTableCommand } from "@aws-sdk/client-dynamodb";
+import {
+  DynamoDBClient,
+  CreateTableCommand,
+  ConditionalCheckFailedException,
+} from "@aws-sdk/client-dynamodb";
 
 const client = new DynamoDBClient({
   endpoint: "http://0.0.0.0:4566",
@@ -74,6 +78,14 @@ class User extends entity("User", {
     userId: i.string(),
     name: i.string(),
     value: i.string(),
+    dangling: i.string().optional(),
+    arr: i.array(i.string()),
+    optionalList: i.array(i.string()).optional(),
+    struct: i.object({
+      a: i.string(),
+      b: i.string(),
+      list: i.array(i.string()),
+    }),
   },
 }) {
   getUsername() {
@@ -142,7 +154,7 @@ test("put, get & query Message", async () => {
   const { items } = await chatTable.query({
     chatId: "chat-id",
     messageId: {
-      $beginsWith: "mess",
+      $beginsWith: "message-id",
     },
   });
   expect(items).toEqual([message]);
@@ -225,6 +237,70 @@ test("deleteBatch", async () => {
 
   const result3 = await chatTable.query({ chatId: "batch-delete-chat-id-1" });
   expect(result3.items).toEqual([]);
+});
+
+test("update", async () => {
+  const user = new User({
+    userId: "user-id",
+    name: "sam",
+    value: "value",
+    dangling: "dangling",
+    arr: ["value"],
+    optionalList: ["value"],
+    struct: {
+      a: "a",
+      b: "b",
+      list: ["value"],
+    },
+  });
+
+  await chatTable.put(user);
+
+  const user2 = await chatTable.get(user);
+
+  expect(user2.item).toEqual(user);
+
+  await chatTable.update({
+    $type: "User",
+    name: "sam",
+    userId: "user-id",
+    value: "value",
+    dangling: undefined,
+    arr: {
+      $append: "value2",
+    },
+    optionalList: ["value"],
+  });
+
+  const user3 = await chatTable.get(user);
+
+  expect(user3.item).toEqual(
+    new User({
+      ...user,
+      dangling: undefined,
+      arr: ["value", "value2"],
+    })
+  );
+
+  try {
+    await chatTable.update(
+      {
+        $type: "User",
+        name: "sam",
+        userId: "user-id",
+        value: "value",
+        dangling: undefined,
+      },
+      {
+        where: {
+          dangling: "dangling",
+        },
+      }
+    );
+    throw new Error("Expected error");
+  } catch (error) {
+    expect(error).toBeInstanceOf(ConditionalCheckFailedException);
+  }
 });
 
 // type-only tests

@@ -39,3 +39,20 @@ export type Widen<T> = T extends (...args: any[]) => any
 export function assertNever(x: never): never {
   throw new Error("Unexpected object: " + x);
 }
+
+export function assertDefined<T>(
+  x: T | undefined,
+  message?: string
+): asserts x is T {
+  if (x === undefined) {
+    throw new Error(message ?? "Expected to be defined");
+  }
+}
+
+export type OneOf<T extends Record<string, any>> = {
+  [k in keyof T]: {
+    [k1 in k]: T[k1];
+  } & {
+    [k1 in keyof Omit<T, k>]?: never;
+  };
+}[keyof T];

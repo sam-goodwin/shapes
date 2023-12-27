@@ -3,8 +3,10 @@ import type { iTraits } from "./trait.js";
 import type { Simplify } from "./util.js";
 import type { valueOfShape } from "./valueOf.js";
 
+export type lit = string;
+
 export type Shape = {
-  [property: string]: iType;
+  [property: string]: iType | lit;
 };
 export type Kind = keyof Types;
 export type iType =

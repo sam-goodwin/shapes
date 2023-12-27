@@ -23,7 +23,7 @@ export type Entity<
 
 export function entity<
   FQN extends string,
-  S extends Shape,
+  const S extends Shape,
   const PK extends readonly AllowedPrimaryKeys<S>[],
   const SK extends readonly AllowedPrimaryKeys<S>[] = []
 >(

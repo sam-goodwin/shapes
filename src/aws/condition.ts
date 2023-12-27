@@ -1,45 +1,95 @@
+import { iSchema } from "../schema.js";
+import {
+  iArray,
+  iBoolean,
+  iNull,
+  iNumber,
+  iObject,
+  iString,
+  iType,
+  iUnion,
+} from "../type.js";
+import type { OneOf } from "../util.js";
 import type { valueOf } from "../valueOf.js";
-import type { Entities, Entity } from "./entity.js";
-import type { PK } from "./key.js";
+import type { Entities } from "./entity.js";
 
-export type QueryExpression<E extends Entities> = {
-  [k in keyof E]: PK<E[k]> & SortKeyExpression<E[k]>;
+export type ConditionExpression<E extends Entities> =
+  | {
+      $exists: boolean;
+    }
+  | {
+      $contains: OneOf<{
+        [path in Paths<E>]: any;
+      }>;
+    }
+  | OneOf<{
+      $and: ConditionExpression<E> | (ConditionExpression<E> | undefined)[];
+      $or: ConditionExpression<E> | (ConditionExpression<E> | undefined)[];
+      $not: ConditionExpression<E>;
+    }>
+  | {
+      [alias in keyof E]: {
+        [k in Exclude<
+          keyof E[alias]["shape"],
+          E[alias]["traits"]["pk"][number] | E[alias]["traits"]["sk"][number]
+        >]?: LeafConditionExpression<E[alias]["shape"][k]>;
+      };
+    }[keyof E];
+
+type Paths<E extends Entities> = {
+  [alias in keyof E]: {
+    [k in keyof E[alias]["shape"]]: k;
+  }[keyof E[alias]["shape"]];
 }[keyof E];
 
-export type SortKeyExpression<
-  E extends Entity,
-  SK extends readonly (string | number | symbol)[] | undefined =
-    | E["traits"]["sk"]
-    | undefined,
-  Exclude = never
-> = SK extends readonly [
-  infer sk extends keyof E["shape"],
-  ...infer sks extends (keyof E["shape"])[]
-]
-  ? sk extends Exclude
-    ? SortKeyExpression<E, sks, Exclude>
-    :
-        | (
-            | { [s in SK[number]]?: never }
-            | {
-                [k in sk]: valueOf<E>[Extract<k, keyof valueOf<E>>];
-              }
-          )
-        | ({
-            [k in sk]: FilterExpression<
-              valueOf<E>[Extract<sk, keyof valueOf<E>>]
-            >;
-          } & {
-            [k in sks[number]]?: never;
-          })
-        | (SortKeyExpression<E, sks, Exclude> extends never
-            ? never
-            : {
-                [k in sk]: valueOf<E>[Extract<k, keyof valueOf<E>>];
-              } & SortKeyExpression<E, sks, Exclude>)
+export type LeafConditionExpression<T> = T extends iArray<infer U>
+  ?
+      | valueOf<T>
+      | {
+          $exists: boolean;
+        }
+      | {
+          [i in number]?: LeafConditionExpression<U>;
+        }
+  : T extends iObject<infer S>
+  ?
+      | valueOf<T>
+      | {
+          $exists: boolean;
+        }
+      | ComparatorExpression<T>
+      | {
+          [k in keyof S]?: LeafConditionExpression<S[k]>;
+        }
+  : T extends iUnion<infer U>
+  ? LeafConditionExpression<U>
+  : T extends iString | iNumber | iBoolean | iNull
+  ?
+      | valueOf<T>
+      | ComparatorExpression<T>
+      | {
+          $exists: boolean;
+        }
   : never;
 
-export function isFilterExpression(a: any): a is FilterExpression<any> {
+type ComparatorExpression<T extends iType> =
+  | {
+      $eq: valueOf<T>;
+    }
+  | {
+      $ne: valueOf<T>;
+    }
+  | {
+      $in: valueOf<T>[];
+    }
+  | {
+      $beginsWith: valueOf<T>;
+    }
+  | {
+      $between: [valueOf<T>, valueOf<T>];
+    };
+
+export function isComparator(a: any): a is Comparator<any> {
   return (
     a &&
     typeof a === "object" &&
@@ -52,15 +102,15 @@ export function isFilterExpression(a: any): a is FilterExpression<any> {
   );
 }
 
-export type FilterExpression<V> =
-  | FilterExpression.GTE<V>
-  | FilterExpression.GT<V>
-  | FilterExpression.LT<V>
-  | FilterExpression.LTE<V>
-  | FilterExpression.BeginsWith<V>
-  | FilterExpression.Between<V>;
+export type Comparator<V> =
+  | Comparator.GTE<V>
+  | Comparator.GT<V>
+  | Comparator.LT<V>
+  | Comparator.LTE<V>
+  | Comparator.BeginsWith<V>
+  | Comparator.Between<V>;
 
-export declare namespace FilterExpression {
+export declare namespace Comparator {
   export type GTE<V> = {
     $gte: V;
   };
@@ -86,30 +136,28 @@ export declare namespace FilterExpression {
   };
 }
 
-export function isGTE(a: any): a is FilterExpression.GTE<string | number> {
+export function isGTE(a: any): a is Comparator.GTE<string | number> {
   return a && typeof a === "object" && "$gte" in a;
 }
 
-export function isGT(a: any): a is FilterExpression.GT<string | number> {
+export function isGT(a: any): a is Comparator.GT<string | number> {
   return a && typeof a === "object" && "$gt" in a;
 }
 
-export function isLT(a: any): a is FilterExpression.LT<string | number> {
+export function isLT(a: any): a is Comparator.LT<string | number> {
   return a && typeof a === "object" && "$lt" in a;
 }
 
-export function isLTE(a: any): a is FilterExpression.LTE<string | number> {
+export function isLTE(a: any): a is Comparator.LTE<string | number> {
   return a && typeof a === "object" && "$lte" in a;
 }
 
 export function isBeginsWith(
   a: any
-): a is FilterExpression.BeginsWith<string | number> {
+): a is Comparator.BeginsWith<string | number> {
   return a && typeof a === "object" && "$beginsWith" in a;
 }
 
-export function isBetween(
-  a: any
-): a is FilterExpression.Between<string | number> {
+export function isBetween(a: any): a is Comparator.Between<string | number> {
   return a && typeof a === "object" && "$between" in a;
 }

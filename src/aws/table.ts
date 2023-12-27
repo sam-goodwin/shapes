@@ -8,6 +8,7 @@ import {
   PutCommand,
   QueryCommand,
   QueryCommandInput,
+  UpdateCommand,
 } from "@aws-sdk/lib-dynamodb";
 import type { valueOf } from "../valueOf.js";
 import type { Entity, Entities } from "./entity.js";
@@ -18,15 +19,20 @@ import {
   PK,
   ShortKeyOfEntity,
 } from "./key.js";
-import type { LastEvaluatedKey, QueriedItem } from "./query.js";
-import {
+import type {
+  LastEvaluatedKey,
+  QueriedItem,
   QueryExpression,
-  isFilterExpression,
+} from "./query.js";
+import {
+  isComparator,
   isBetween,
   isBeginsWith,
-  SortKeyExpression,
+  Comparator,
+  ConditionExpression,
 } from "./condition.js";
-import { Widen, Simplify, NotUndefined } from "../util.js";
+import { Widen, Simplify, NotUndefined, assertDefined } from "../util.js";
+import { UpdateRequest } from "./update.js";
 
 export interface TableProps {
   tableName: string;
@@ -166,6 +172,201 @@ export function table<E extends Record<string, Entity>>(
       }
     }
 
+    async update<const Req extends UpdateRequest<E>>(
+      req: Req,
+      options?: {
+        where?: ConditionExpression<E>;
+      }
+    ): Promise<{}> {
+      const idToName: {
+        [id in string]: string;
+      } = {};
+
+      const nameToId: {
+        [name in string]: string;
+      } = {};
+
+      const values: {
+        [id in string]: any;
+      } = {};
+
+      const SET: string[] = [];
+      const REMOVE: string[] = [];
+
+      let nameIDCounter = 0;
+      let valueIDCounter = 0;
+
+      visitUpdateExpr(req);
+
+      const command = new UpdateCommand({
+        TableName: this.tableName,
+        Key: createKey(req),
+        UpdateExpression: `${SET.length > 0 ? ` SET ${SET.join(", ")}` : ""}${
+          REMOVE.length > 0 ? ` REMOVE ${REMOVE.join(", ")}` : ""
+        }`,
+        ConditionExpression: options?.where
+          ? visitConditionExpr(options.where)
+          : undefined!,
+        ExpressionAttributeNames: idToName,
+        ExpressionAttributeValues: values,
+      });
+      // console.log(command.input);
+
+      const response = await this.client.send(command);
+
+      return response;
+
+      function val(value: any) {
+        const id = `:${valueIDCounter++}`;
+        values[id] = value;
+        return id;
+      }
+
+      function name(name: string) {
+        if (name in nameToId) {
+          return idToName[nameToId[name]];
+        } else {
+          const ref = `#${nameIDCounter++}`;
+          nameToId[name] = ref;
+          idToName[ref] = name;
+          return ref;
+        }
+      }
+
+      function visitUpdateExpr(
+        value: any,
+        {
+          path,
+        }: {
+          path?: string | undefined;
+        } = {}
+      ): void {
+        if (value === undefined) {
+          assertDefined(path);
+          REMOVE.push(name(path));
+        } else if (
+          value === null ||
+          typeof value === "string" ||
+          typeof value === "number" ||
+          typeof value === "boolean" ||
+          typeof value === "bigint" ||
+          Array.isArray(value)
+        ) {
+          assertDefined(path);
+          SET.push(`${name(path)} = ${val(value)}`);
+        } else if (typeof value === "object") {
+          Object.entries(value).forEach(([key, value]) => {
+            if (key === "$append") {
+              assertDefined(path);
+              SET.push(
+                `${name(path)} = list_append(${name(path)}, ${val([value])})`
+              );
+            } else if (key === "$set") {
+              assertDefined(path);
+              SET.push(`${name(path)} = ${val(value)}`);
+            } else if (key === "$unset") {
+              assertDefined(path);
+              REMOVE.push(name(path));
+            } else {
+              visitUpdateExpr(value, {
+                path: path ? `${path}.${key}` : key,
+              });
+            }
+          });
+        } else {
+          throw new Error(`Invalid update: ${JSON.stringify(value)}`);
+        }
+      }
+
+      function visitConditionExpr(
+        value: any,
+        {
+          path,
+          op = "and",
+        }: {
+          path?: string | undefined;
+          op?: "and" | "or" | "not" | undefined;
+        } = {}
+      ): string {
+        if (
+          value === null ||
+          typeof value === "string" ||
+          typeof value === "number" ||
+          typeof value === "boolean" ||
+          typeof value === "bigint"
+        ) {
+          return val(value);
+        } else if (Array.isArray(value)) {
+          return val(value);
+        } else if (typeof value === "object") {
+          if ("$and" in value) {
+            return visitConditionExpr(value, {
+              path,
+              op: "and",
+            });
+          } else if ("$or" in value) {
+            return visitConditionExpr(value, {
+              path,
+              op: "or",
+            });
+          } else if ("$not" in value) {
+            return visitConditionExpr(value, {
+              path,
+              op: "not",
+            });
+          } else {
+            return Object.entries(value)
+              .map(([key, value]) => visitLeafConditionExpr(key, value))
+              .join(" and ");
+          }
+        } else {
+          throw new Error(`Invalid condition: ${JSON.stringify(value)}`);
+        }
+
+        function visitLeafConditionExpr(key: string, value: any) {
+          if (key === "$exists") {
+            if (value) {
+              return `attribute_exists(${name(path ?? "$pk")})`;
+            } else {
+              return `attribute_not_exists(${name(path ?? "$pk")})`;
+            }
+          } else if (key === "$eq") {
+            assertDefined(path);
+            return `${name(path)} = ${val(value)}`;
+          } else if (key === "$ne") {
+            assertDefined(path);
+            return `${name(path)} <> ${val(value)}`;
+          } else if (key === "$gt") {
+            assertDefined(path);
+            return `${name(path)} > ${val(value)}`;
+          } else if (key === "$gte") {
+            assertDefined(path);
+            return `${name(path)} >= ${val(value)}`;
+          } else if (key === "$lt") {
+            assertDefined(path);
+            return `${name(path)} < ${val(value)}`;
+          } else if (key === "$lte") {
+            assertDefined(path);
+            return `${name(path)} <= ${val(value)}`;
+          } else if (key === "$beginsWith") {
+            assertDefined(path);
+            return `begins_with(${name(path)}, ${val(value)})`;
+          } else if (key === "$between") {
+            assertDefined(path);
+            if (Array.isArray(value) && value.length === 2) {
+              return `${name(path)} BETWEEN ${val(value[0])} AND ${val(
+                value[1]
+              )}`;
+            } else {
+              throw new Error(`Invalid $between: ${JSON.stringify(value)}`);
+            }
+          } else {
+            return `${name(path ? `${path}.${key}` : key)} = ${val(value)}`;
+          }
+        }
+      }
+    }
+
     async delete(item: any, ...rest: any[]): Promise<any> {
       if (Array.isArray(item) || rest.length > 0) {
         const items = Array.isArray(item) ? item : [item, ...rest];
@@ -259,7 +460,7 @@ export function table<E extends Record<string, Entity>>(
           if (sk in query) {
             queryKeys.delete(sk);
             const skV = query[sk as keyof typeof query];
-            if (isFilterExpression(skV)) {
+            if (isComparator(skV)) {
               if (isBetween(skV)) {
                 skExpressionAttributeValues[":sk_left"] = [
                   ...skValuePrefix,
@@ -399,17 +600,24 @@ export type Table<E extends Entities> = {
     unprocessedKeys: valueOf<E[keyof E]>[] | undefined;
   }>;
 
-  delete<Items extends valueOf<E[keyof E]>>(item: Items): Promise<{}>;
-  delete<const Items extends BatchPutItems<E>>(
-    ...items: Items
+  delete<Key extends KeysOfEntities<E>>(key: Key): Promise<{}>;
+  delete<const Keys extends BatchPutItems<E>>(
+    ...items: Keys
   ): Promise<{
     unprocessedKeys: valueOf<E[keyof E]>[];
   }>;
-  delete<const Items extends BatchPutItems<E>>(
-    items: Items
+  delete<const Keys extends BatchPutItems<E>>(
+    items: Keys
   ): Promise<{
     unprocessedKeys: valueOf<E[keyof E]>[] | undefined;
   }>;
+
+  update<const Key extends UpdateRequest<E>>(
+    item: Key,
+    options?: {
+      where?: ConditionExpression<E>;
+    }
+  ): Promise<{}>;
 
   query: {
     <const Q extends QueryExpression<E>>(

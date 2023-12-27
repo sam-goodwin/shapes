@@ -14,10 +14,13 @@ import type {
   iEnum,
   iNativeEnum,
   EnumLike,
+  lit,
 } from "./type.js";
 import type { Simplify, OptionalKeys } from "./util.js";
 
-export type valueOf<Type, Self = never> = Type extends iUndefined
+export type valueOf<Type, Self = never> = Type extends lit
+  ? Type
+  : Type extends iUndefined
   ? undefined
   : Type extends iVoid
   ? void
