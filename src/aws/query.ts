@@ -5,7 +5,9 @@ import type { Entities, Entity } from "./entity.js";
 import type { KeysOfEntities, PK } from "./key.js";
 
 export type QueryExpression<E extends Entities> = {
-  [k in keyof E]: PK<E[k]> & SortKeyExpression<E[k]>;
+  [k in keyof E]: E[k]["traits"]["sk"] extends []
+    ? PK<E[k]>
+    : PK<E[k]> & SortKeyExpression<E[k]>;
 }[keyof E];
 
 export type SortKeyExpression<

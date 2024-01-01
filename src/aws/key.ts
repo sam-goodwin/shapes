@@ -13,27 +13,26 @@ export function isKey(a: any): a is Key {
   return a && typeof a === "object" && "$type" in a;
 }
 
-export type KeyOfEntity<E extends Entity> = Simplify<
-  E["traits"]["sk"] extends undefined ? PK<E> : PK<E> & SK<E>
->;
+export type KeyOfEntity<E extends Entity> = Simplify<PK<E> & SK<E>>;
 
-export type ShortKeyOfEntity<E extends Entity> = Simplify<
-  {
-    [pk in E["traits"]["pk"][number]]: pk extends "$type"
-      ? E["traits"]["fqn"]
-      : valueOfShape<E["shape"], any>[Extract<
-          pk,
-          keyof valueOfShape<E["shape"], any>
-        >];
-  } & {
-    [sk in E["traits"]["sk"][number]]: sk extends "$type"
-      ? E["traits"]["fqn"]
-      : valueOfShape<E["shape"], any>[Extract<
-          sk,
-          keyof valueOfShape<E["shape"], any>
-        >];
-  }
->;
+export type ShortKeyOfEntity<E extends Entity<any, any, any, any, any>> =
+  Simplify<
+    {
+      [pk in E["traits"]["pk"][number]]: pk extends "$type"
+        ? E["traits"]["fqn"]
+        : valueOfShape<E["shape"], any>[Extract<
+            pk,
+            keyof valueOfShape<E["shape"], any>
+          >];
+    } & {
+      [sk in E["traits"]["sk"][number]]: sk extends "$type"
+        ? E["traits"]["fqn"]
+        : valueOfShape<E["shape"], any>[Extract<
+            sk,
+            keyof valueOfShape<E["shape"], any>
+          >];
+    }
+  >;
 
 export type KeysOfEntities<E extends Entities> = {
   [K in keyof E]: KeyOfEntity<E[K]>;

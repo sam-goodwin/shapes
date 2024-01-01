@@ -1,5 +1,6 @@
 import { test, beforeAll, expect } from "bun:test";
 
+import { createOrUpdateTable } from "../src/aws/crud.js";
 import i from "../src/index.js";
 import {
   LastEvaluatedKey as _LastEvaluatedKey,
@@ -16,60 +17,7 @@ import {
   CreateTableCommand,
   ConditionalCheckFailedException,
 } from "@aws-sdk/client-dynamodb";
-
-const client = new DynamoDBClient({
-  endpoint: "http://0.0.0.0:4566",
-});
-const documentClient = DynamoDBDocumentClient.from(client);
-
-beforeAll(async () => {
-  try {
-    await client.send(
-      new CreateTableCommand({
-        TableName: "test_table",
-        KeySchema: [
-          { AttributeName: "$pk", KeyType: "HASH" },
-          { AttributeName: "$sk", KeyType: "RANGE" },
-        ],
-        AttributeDefinitions: [
-          { AttributeName: "$pk", AttributeType: "S" },
-          { AttributeName: "$sk", AttributeType: "S" },
-        ],
-        ProvisionedThroughput: {
-          ReadCapacityUnits: 5,
-          WriteCapacityUnits: 5,
-        },
-      })
-    );
-  } catch (err: any) {
-    console.log("Table already exists");
-  }
-
-  let params = {
-    TableName: "test_table",
-    ConsistentRead: true,
-  };
-  while (true) {
-    const scan = await documentClient.send(new ScanCommand(params));
-    if (scan.Items === undefined || scan.Items.length === 0) {
-      break;
-    }
-    const deleteRequests = scan.Items?.map((item) => ({
-      DeleteRequest: {
-        Key: {
-          $pk: item["$pk"],
-          $sk: item["$sk"],
-        },
-      },
-    }));
-    const batchParams = {
-      RequestItems: {
-        test_table: deleteRequests,
-      },
-    };
-    await documentClient.send(new BatchWriteCommand(batchParams));
-  }
-});
+import { documentClient, prepareTable } from "./dynamodb-client.js";
 
 class User extends entity("User", {
   pk: ["userId"],
@@ -118,9 +66,6 @@ class Message extends entity("Message", {
 }
 
 declare namespace ChatTable {
-  export type LastEvaluatedKey<Q extends ChatTable.Query> = ReturnType<
-    typeof ChatTable.LastEvaluatedKey<Q>
-  >;
   export type Query = typeof ChatTable.Query;
   export type QueryItem<Q extends Query> = ReturnType<
     typeof ChatTable.QueryItem<Q>
@@ -128,14 +73,20 @@ declare namespace ChatTable {
 }
 
 class ChatTable extends table({
-  user: User,
-  chat: Chat,
-  message: Message,
+  entities: {
+    User,
+    Chat,
+    Message,
+  },
 }) {}
 
 const chatTable = new ChatTable({
   tableName: "test_table",
   client: documentClient,
+});
+
+beforeAll(async () => {
+  await prepareTable(chatTable as any);
 });
 
 test("put, get & query Message", async () => {
@@ -374,7 +325,7 @@ async function foo() {
       items: readonly [Chat | undefined, Chat | undefined, Message | undefined];
     };
 
-    const { items: users, lastEvaluatedKey } = (await chatTable.query({
+    const { items: users, nextToken } = (await chatTable.query({
       userId: "user",
       name: "sam",
       value: {
@@ -382,7 +333,6 @@ async function foo() {
       },
     })) satisfies {
       items: User[];
-      lastEvaluatedKey: typeof User.Key.$infer | undefined;
     };
 
     const { items: users3 } = await chatTable.query({
@@ -395,16 +345,9 @@ async function foo() {
       messageId: {
         $beginsWith: "msg-",
       },
-    })) satisfies {
-      lastEvaluatedKey:
-        | {
-            readonly chatId: "chat-id";
-            readonly messageId: `msg-${string}`;
-          }
-        | undefined;
-    };
+    })) satisfies {};
 
-    const { items: messages, lastEvaluatedKey: last } = await chatTable.query(
+    const { items: messages, nextToken: nextToken2 } = await chatTable.query(
       {
         chatId: "chat-id",
         messageId: {
@@ -412,7 +355,7 @@ async function foo() {
         },
       },
       {
-        lastEvaluatedKey: a.lastEvaluatedKey,
+        nextToken: a.nextToken,
       }
     );
 
@@ -423,17 +366,15 @@ async function foo() {
           $beginsWith: "msg-",
         },
       } as const satisfies ChatTable.Query;
-      let lastEvaluatedKey:
-        | ChatTable.LastEvaluatedKey<typeof query>
-        | undefined;
+      let nextToken: string | undefined;
       const items: ChatTable.QueryItem<typeof query>[] = [];
       do {
         const response = await chatTable.query(query, {
-          lastEvaluatedKey,
+          nextToken: nextToken,
         });
         items.push(...response.items);
-        lastEvaluatedKey = response.lastEvaluatedKey;
-      } while (lastEvaluatedKey);
+        nextToken = response.nextToken;
+      } while (nextToken);
       return items;
     }
 
@@ -454,15 +395,15 @@ async function foo() {
 
     async function queryMessages_3<Q extends ChatTable.Query>(
       query: Q,
-      lastEvaluatedKey?: ChatTable.LastEvaluatedKey<Q> | undefined
+      nextToken?: string | undefined
     ): Promise<ChatTable.QueryItem<Q>[]> {
       const response = await chatTable.query(query, {
-        lastEvaluatedKey,
+        nextToken,
       });
-      if (response.lastEvaluatedKey) {
+      if (response.nextToken) {
         return [
           ...(response.items ?? []),
-          ...(await queryMessages_3(query, response.lastEvaluatedKey)),
+          ...(await queryMessages_3(query, response.nextToken)),
         ] as ChatTable.QueryItem<Q>[];
       } else {
         return response.items as ChatTable.QueryItem<Q>[];

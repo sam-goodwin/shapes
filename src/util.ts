@@ -56,3 +56,5 @@ export type OneOf<T extends Record<string, any>> = {
     [k1 in keyof Omit<T, k>]?: never;
   };
 }[keyof T];
+
+export type NonEmptyArray<T> = [T, ...T[]];

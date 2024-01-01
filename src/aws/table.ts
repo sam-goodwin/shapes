@@ -2,48 +2,50 @@ import {
   BatchGetCommand,
   BatchGetCommandInput,
   BatchWriteCommand,
+  BatchWriteCommandInput,
   DeleteCommand,
   DynamoDBDocumentClient,
   GetCommand,
   PutCommand,
   QueryCommand,
   QueryCommandInput,
+  ScanCommand,
   UpdateCommand,
 } from "@aws-sdk/lib-dynamodb";
 import type { valueOf } from "../valueOf.js";
-import type { Entity, Entities } from "./entity.js";
-import {
-  isKey,
-  type KeysOfEntities,
-  type KeyOfEntity,
-  PK,
-  ShortKeyOfEntity,
-} from "./key.js";
-import type {
-  LastEvaluatedKey,
-  QueriedItem,
-  QueryExpression,
-} from "./query.js";
+import type { Entity, Entities, entity } from "./entity.js";
+import { isKey, type KeysOfEntities, type KeyOfEntity } from "./key.js";
+import type { QueriedItem, QueryExpression } from "./query.js";
 import {
   isComparator,
   isBetween,
   isBeginsWith,
-  Comparator,
   ConditionExpression,
 } from "./condition.js";
-import { Widen, Simplify, NotUndefined, assertDefined } from "../util.js";
+import { Widen, NotUndefined, assertDefined } from "../util.js";
 import { UpdateRequest } from "./update.js";
+import { IndexQueryExpression, Indexes } from "./index.js";
 
 export interface TableProps {
   tableName: string;
   client: DynamoDBDocumentClient;
 }
 
-export function table<E extends Record<string, Entity>>(
-  entities: E
-): TableSpec<E> {
+export interface TableOptions<E extends Entities, I extends Indexes<E>> {
+  entities: E;
+  indexes?: I;
+}
+
+export function table<E extends Entities, I extends Indexes<E>>({
+  entities,
+  indexes,
+}: TableOptions<E, I>): TableSpec<E> {
   // @ts-expect-error - cannot implement dynamic methods
   return class implements Table<E> {
+    static readonly entities = entities;
+    static readonly indexes = indexes!;
+
+    readonly entities = entities;
     readonly tableName;
     readonly client;
 
@@ -54,14 +56,14 @@ export function table<E extends Record<string, Entity>>(
       const self = this;
       // @ts-expect-error
       this.query.iter = async function* (query: any, options: any) {
-        let lastEvaluatedKey;
+        let nextToken;
         do {
           const response = await self.query(query, options);
-          lastEvaluatedKey = response.lastEvaluatedKey;
+          nextToken = response.nextToken;
           for (const item of response.items) {
             yield item;
           }
-        } while (lastEvaluatedKey);
+        } while (nextToken);
       };
     }
 
@@ -135,16 +137,18 @@ export function table<E extends Record<string, Entity>>(
       if (Array.isArray(item) || rest.length > 0) {
         const items = Array.isArray(item) ? item : [item, ...rest];
         const failed: any[] = [];
+
+        const batchPutParams: BatchWriteCommandInput = {
+          RequestItems: {
+            [this.tableName]: items.map((item) => ({
+              PutRequest: {
+                Item: marshallItem(getEntityFor(item), item),
+              },
+            })),
+          },
+        };
         const response = await this.client.send(
-          new BatchWriteCommand({
-            RequestItems: {
-              [this.tableName]: items.map((item) => ({
-                PutRequest: {
-                  Item: marshallItem(getEntityFor(item), item),
-                },
-              })),
-            },
-          })
+          new BatchWriteCommand(batchPutParams)
         );
         return {
           unprocessedItems: response.UnprocessedItems?.[this.tableName]?.map(
@@ -210,7 +214,6 @@ export function table<E extends Record<string, Entity>>(
         ExpressionAttributeNames: idToName,
         ExpressionAttributeValues: values,
       });
-      // console.log(command.input);
 
       const response = await this.client.send(command);
 
@@ -403,11 +406,11 @@ export function table<E extends Record<string, Entity>>(
     async query<const Q extends QueryExpression<E>>(
       query: Q,
       options?: {
-        lastEvaluatedKey?: LastEvaluatedKey<E, Q>;
+        nextToken?: string;
       }
     ): Promise<{
       items: QueriedItem<E, Q>[];
-      lastEvaluatedKey: LastEvaluatedKey<E, Q> | undefined;
+      nextToken: string | undefined;
     }> {
       let keyConditionExpression = Object.values(entities)
         .map(createKeyConditionExpression)
@@ -420,6 +423,7 @@ export function table<E extends Record<string, Entity>>(
         TableName: this.tableName,
         ...keyConditionExpression,
         ConsistentRead: true,
+        // ExclusiveStartKey: exclusiveStartKey
       } satisfies QueryCommandInput;
       const response = await this.client.send(new QueryCommand(params));
 
@@ -428,7 +432,9 @@ export function table<E extends Record<string, Entity>>(
           response.Items?.map(parseItem).filter(
             (v): v is NotUndefined<typeof v> => v !== undefined
           ) ?? [],
-        lastEvaluatedKey: response.LastEvaluatedKey as any,
+        nextToken: response.LastEvaluatedKey
+          ? JSON.stringify(response.LastEvaluatedKey)
+          : undefined,
       };
 
       function createKeyConditionExpression(entity: Entity):
@@ -509,7 +515,30 @@ export function table<E extends Record<string, Entity>>(
         };
       }
     }
+
+    // @ts-ignore
+    async scan(options?: { nextToken?: string }): Promise<{
+      items: valueOf<E[keyof E]>[] | undefined;
+      nextToken: string | undefined;
+    }> {
+      const command = new ScanCommand({
+        TableName: this.tableName,
+        ExclusiveStartKey: options?.nextToken
+          ? JSON.parse(options.nextToken)
+          : undefined,
+      });
+      const response = await this.client.send(command);
+
+      return {
+        items: response.Items?.map(parseItem),
+        nextToken: response.LastEvaluatedKey
+          ? JSON.stringify(response.LastEvaluatedKey)
+          : undefined,
+      };
+    }
   };
+
+  function parseKey(key: any) {}
 
   function parseItem(item: any) {
     const entity = findEntity(item.$type);
@@ -546,23 +575,63 @@ export function table<E extends Record<string, Entity>>(
     if (entity === undefined) {
       throw new Error(`Unknown Entity: ${key.$type}`);
     }
-    const $pk = entity.traits.pk.map((pk) => key[pk]).join("#");
-    const $sk = entity.traits.sk?.map((sk) => key[sk])?.join("#");
+    const $pk = entity.traits.pk
+      .map((pk: keyof typeof key) => key[pk])
+      .join("#");
+    const $sk = entity.traits.sk
+      ?.map((sk: keyof typeof key) => key[sk])
+      ?.join("#");
     return { $pk, $sk };
   }
 }
 
-export interface TableSpec<E extends Record<string, Entity>> {
+export interface TableSpec<E extends Entities = Entities> {
   entities: E;
 
-  LastEvaluatedKey<Q extends QueryExpression<E>>(): LastEvaluatedKey<E, Q>;
   Query: QueryExpression<E>;
   QueryItem<Q extends QueryExpression<E>>(): QueriedItem<E, Q>;
 
   new (props: TableProps): Table<E>;
 }
 
-export type Table<E extends Entities> = {
+export type Table<E extends Entities = Entities> = {
+  [entityName in keyof E]: E[entityName]["traits"]["indexes"] extends undefined
+    ? {}
+    : {
+        [index in keyof E[entityName]["traits"]["indexes"]]: {
+          <
+            const Q extends IndexQueryExpression<
+              E[entityName]["traits"]["indexes"][index],
+              E[entityName]
+            >
+          >(
+            query: Q,
+            options?: {
+              nextToken?: string;
+            }
+          ): Promise<{
+            items: valueOf<E[entityName]>[];
+            nextToken?: string;
+          }>;
+
+          iter: <
+            const Q extends IndexQueryExpression<
+              E[entityName]["traits"]["indexes"][index],
+              E[entityName]
+            >
+          >(
+            query: Q,
+            options?: {
+              nextToken?: string;
+            }
+          ) => AsyncIterable<valueOf<E[entityName]>>;
+        };
+      };
+} & {
+  readonly tableName: string;
+  readonly entities: E;
+  readonly client: DynamoDBDocumentClient;
+
   get<const Key extends KeysOfEntities<E>>(
     key: Key
   ): Promise<{
@@ -601,12 +670,12 @@ export type Table<E extends Entities> = {
   }>;
 
   delete<Key extends KeysOfEntities<E>>(key: Key): Promise<{}>;
-  delete<const Keys extends BatchPutItems<E>>(
+  delete<const Keys extends KeysOfEntities<E>[]>(
     ...items: Keys
   ): Promise<{
     unprocessedKeys: valueOf<E[keyof E]>[];
   }>;
-  delete<const Keys extends BatchPutItems<E>>(
+  delete<const Keys extends KeysOfEntities<E>[]>(
     items: Keys
   ): Promise<{
     unprocessedKeys: valueOf<E[keyof E]>[] | undefined;
@@ -623,19 +692,30 @@ export type Table<E extends Entities> = {
     <const Q extends QueryExpression<E>>(
       query: Q,
       options?: {
-        lastEvaluatedKey?: LastEvaluatedKey<E, Q>;
+        nextToken?: string;
       }
     ): Promise<{
       items: QueriedItem<E, Q>[];
-      lastEvaluatedKey: LastEvaluatedKey<E, Q> | undefined;
+      nextToken?: string;
     }>;
 
     iter: <const Q extends QueryExpression<E>>(
       query: Q,
       options?: {
-        lastEvaluatedKey?: LastEvaluatedKey<E, Q>;
+        nextToken?: string;
       }
     ) => AsyncIterable<QueriedItem<E, Q>>;
+  };
+
+  scan: {
+    (options?: { nextToken?: string }): Promise<{
+      items: valueOf<E[keyof E]>[];
+      nextToken: string | undefined;
+    }>;
+
+    iter: (options?: {
+      nextToken?: string;
+    }) => AsyncIterable<valueOf<E[keyof E]>>;
   };
 };
 
