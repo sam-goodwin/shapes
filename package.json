@@ -1,6 +1,6 @@
 {
-  "name": "itty-schema",
-  "version": "0.0.5",
+  "name": "shapes",
+  "version": "0.5.0",
   "description": "",
   "type": "module",
   "files": [

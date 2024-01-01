@@ -1,4 +1,4 @@
 {
   "typescript.tsdk": "node_modules/typescript/lib",
-  "cSpell.words": ["typebox"]
+  "cSpell.words": ["Deno", "typebox"]
 }
