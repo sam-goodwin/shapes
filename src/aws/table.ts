@@ -413,7 +413,7 @@ export function table<E extends Entities, I extends Indexes<E>>({
       nextToken: string | undefined;
     }> {
       let keyConditionExpression = Object.values(entities)
-        .map(createKeyConditionExpression)
+        .map((e) => createKeyConditionExpression(e))
         .find((v) => v !== undefined);
       if (keyConditionExpression === undefined) {
         throw new Error(`Invalid Query: ${JSON.stringify(query)}`);

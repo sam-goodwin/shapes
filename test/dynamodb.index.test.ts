@@ -1,6 +1,6 @@
 import i from "../src/index.js";
 import { entity, table } from "../src/aws/dynamodb.js";
-import { beforeAll, expect, test } from "bun:test";
+import { beforeAll, test } from "bun:test";
 import { documentClient, prepareTable } from "./dynamodb-client.js";
 
 export class Thread extends entity("Thread", {
